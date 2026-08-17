@@ -876,6 +876,9 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     `        frontRight.setDirection(DcMotorSimple.Direction.${revFR ? "REVERSE" : "FORWARD"});`,
     `        backRight.setDirection(DcMotorSimple.Direction.${revBR ? "REVERSE" : "FORWARD"});`,
     "",
+    "        // Always BRAKE in autonomous, whatever the TeleOp setting says. A",
+    "        // coasting robot cannot settle inside tolerance, so driveTo would",
+    "        // hunt past the target until the leg timed out.",
     "        frontLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);",
     "        frontRight.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);",
     "        backLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);",
@@ -897,8 +900,15 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     `                RevHubOrientationOnRobot.UsbFacingDirection.${(profile && profile.imu && profile.imu.usbDirection) || "FORWARD"})));`,
     "        imu.resetYaw();",
     "");
+  // Mechanism motors keep the behaviour set in BotBuilder, so an arm that holds
+  // position in TeleOp holds it here too.
+  const auxZeroPower = {};
+  ((profile && profile.auxMotors) || []).forEach(a => {
+    if (a.hardwareName) auxZeroPower[a.hardwareName] = a.zeroPower || "FLOAT";
+  });
   Array.from(macroMotors).forEach(m => {
     P(`        ${m} = hardwareMap.get(DcMotorEx.class, "${m}");`);
+    P(`        ${m}.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.${auxZeroPower[m] || "FLOAT"});`);
     P(`        ${m}.setMode(DcMotor.RunMode.RUN_USING_ENCODER);`);
   });
   Array.from(macroServos).forEach(m => P(`        ${m} = hardwareMap.get(Servo.class, "${m}");`));
