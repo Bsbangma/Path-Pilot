@@ -1,0 +1,2260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PathPilot &mdash; FTC Autonomous Path Planner</title>
+<meta name="theme-color" content="#18181b">
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #18181b; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+textarea { background: #18181b; color: #fafafa; border: 1px solid #3f3f46; border-radius: 4px; padding: 8px; }
+textarea:focus { outline: none; border-color: #3B82F6; }
+input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; background: #3f3f46; border-radius: 2px; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: #3B82F6; border-radius: 50%; cursor: pointer; }
+input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; background: #3B82F6; border-radius: 50%; cursor: pointer; border: none; }
+input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #3B82F6; }
+input[type="text"]:focus, input[type="number"]:focus, select:focus { outline: none; border-color: #3B82F6; }
+button:hover:not(:disabled) { background: #3f3f46 !important; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const useState = React.useState;
+const useRef = React.useRef;
+const useEffect = React.useEffect;
+const useCallback = React.useCallback;
+
+const LOGO = "data:image/png;base64,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";
+
+/* ============================================================================
+ * PathPilot — season DSL engine
+ * ----------------------------------------------------------------------------
+ * A season is pure JSON. No functions, no code. That's what makes a season pack
+ * safe to hand to another team: it can only describe a field, never execute.
+ *
+ * This file holds the interpreter: geometry helpers, a tiny arithmetic
+ * evaluator for size-dependent expressions, the rule engine that turns
+ * declarative startRules into violation messages, the emit-template renderer,
+ * and the stop-at-waypoint timing model.
+ *
+ * COORDINATES (all seasons): (0,0) is the bottom-left field corner from the
+ * audience. +X right, +Y away from the audience. Heading 0 faces +Y, CW positive.
+ * ==========================================================================*/
+
+const DSL_VERSION = 1;
+
+/* ------------------------------------------------------------- geometry -- */
+
+const distToSeg = (px, py, x1, y1, x2, y2) => {
+  const dx = x2 - x1, dy = y2 - y1;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - x1) * dx + (py - y1) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+};
+
+const pointInPoly = (px, py, poly) => {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+};
+
+const circleHitsPoly = (cx, cy, r, poly) => {
+  if (pointInPoly(cx, cy, poly)) return true;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    if (distToSeg(cx, cy, poly[i][0], poly[i][1], poly[j][0], poly[j][1]) < r) return true;
+  }
+  return false;
+};
+
+const circleNearPolyEdge = (cx, cy, r, poly) => {
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    if (distToSeg(cx, cy, poly[i][0], poly[i][1], poly[j][0], poly[j][1]) <= r) return true;
+  }
+  return false;
+};
+
+/* A swept circle along a segment. Waypoint-only checking misses the case where
+ * both endpoints are clear but the straight line between them passes through a
+ * structure. Sampled at 1" so a 144" traverse costs ~145 point tests. */
+const sweepHitsPoly = (x1, y1, x2, y2, r, poly) => {
+  const d = Math.hypot(x2 - x1, y2 - y1);
+  const steps = Math.max(1, Math.ceil(d));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    if (circleHitsPoly(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, r, poly)) return true;
+  }
+  return false;
+};
+
+const shapeToPoly = (shape) => {
+  if (shape.type === "rect") {
+    const { x, y, width, height } = shape;
+    return [[x, y], [x + width, y], [x + width, y + height], [x, y + height]];
+  }
+  return shape.points;
+};
+
+/* --------------------------------------------------- expression evaluator - */
+/* Recursive descent over + - * / and parentheses. No eval, no Function — an
+ * imported pack can put arithmetic in a preset but cannot run code. */
+
+const evalExpr = (expr, vars) => {
+  if (typeof expr === "number") return expr;
+  const s = String(expr);
+  let i = 0;
+  const skip = () => { while (i < s.length && s[i] === " ") i++; };
+
+  const factor = () => {
+    skip();
+    if (s[i] === "-") { i++; return -factor(); }
+    if (s[i] === "+") { i++; return factor(); }
+    if (s[i] === "(") {
+      i++;
+      const v = expression();
+      skip();
+      if (s[i] !== ")") throw new Error(`expected ) in "${s}"`);
+      i++;
+      return v;
+    }
+    const num = /^\d*\.?\d+/.exec(s.slice(i));
+    if (num) { i += num[0].length; return parseFloat(num[0]); }
+    const id = /^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i));
+    if (id) {
+      i += id[0].length;
+      if (!(id[0] in vars)) throw new Error(`unknown variable "${id[0]}" in "${s}"`);
+      return vars[id[0]];
+    }
+    throw new Error(`cannot parse "${s}" at ${i}`);
+  };
+
+  const term = () => {
+    let v = factor();
+    for (;;) {
+      skip();
+      if (s[i] === "*") { i++; v *= factor(); }
+      else if (s[i] === "/") { i++; v /= factor(); }
+      else return v;
+    }
+  };
+
+  const expression = () => {
+    let v = term();
+    for (;;) {
+      skip();
+      if (s[i] === "+") { i++; v += term(); }
+      else if (s[i] === "-") { i++; v -= term(); }
+      else return v;
+    }
+  };
+
+  const out = expression();
+  skip();
+  if (i !== s.length) throw new Error(`trailing input in "${s}"`);
+  if (!Number.isFinite(out)) throw new Error(`"${s}" is not finite`);
+  return out;
+};
+
+const exprVars = (dsl, robotSize) => ({
+  r: robotSize / 2,
+  robotSize,
+  size: dsl.field.size,
+  field: dsl.field.size,
+  tile: dsl.field.tile,
+  half: dsl.field.size / 2,
+  SQRT2: Math.SQRT2,
+  PI: Math.PI,
+});
+
+/* -------------------------------------------------------------- compiler - */
+
+const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function compileSeason(dsl) {
+  if (dsl.pathpilotSeason !== DSL_VERSION) {
+    throw new Error(`season "${dsl.id}" declares format ${dsl.pathpilotSeason}, this build reads ${DSL_VERSION}`);
+  }
+  for (const k of ["id", "name", "field", "alliances", "mirror", "geometry", "actions"]) {
+    if (dsl[k] === undefined) throw new Error(`season "${dsl.id}" missing "${k}"`);
+  }
+
+  const S = dsl.field.size;
+  const obstacles = (dsl.obstacles || []).map(o => ({ ...o, poly: shapeToPoly(o.shape) }));
+
+  const mirrorPoint = (x, y) =>
+    dsl.mirror.axis === "x" ? { x: 2 * dsl.mirror.at - x, y } : { x, y: 2 * dsl.mirror.at - y };
+  const mirrorHeading = (h) =>
+    dsl.mirror.axis === "x" ? (360 - h) % 360 : (540 - h) % 360;
+  const mirrorTag = (id) => {
+    const m = dsl.mirror.tagSwap || {};
+    return m[id] !== undefined ? m[id] : id;
+  };
+
+  /* Presets are authored once for dsl.presetsDefinedFor and mirrored for the
+   * other alliance, so the two halves can never drift apart. */
+  const getPresets = (alliance, robotSize) => {
+    const vars = exprVars(dsl, robotSize);
+    const base = dsl.presetsDefinedFor || "blue";
+    const flip = alliance !== base;
+    const out = (dsl.startPresets || []).map(p => {
+      let x = evalExpr(p.x, vars);
+      let y = evalExpr(p.y, vars);
+      let heading = p.heading;
+      if (flip) { const m = mirrorPoint(x, y); x = m.x; y = m.y; heading = mirrorHeading(heading); }
+      return {
+        id: p.id,
+        label: String(p.label)
+          .replace(/\{Alliance\}/g, titleCase(dsl.alliances[alliance].label))
+          .replace(/\{alliance\}/g, dsl.alliances[alliance].label.toLowerCase()),
+        x: +x.toFixed(1), y: +y.toFixed(1), heading,
+      };
+    });
+    out.push({ id: "custom", label: "Custom", x: null, y: null, heading: null });
+    return out;
+  };
+
+  /* Declarative rule engine. Each entry in startRules names a check type; the
+   * message may reference {obstacle} or {region}. */
+  const validateStart = (pose, { alliance, robotSize }) => {
+    const r = robotSize / 2;
+    const { x, y } = pose;
+    const issues = [];
+    const A = dsl.alliances[alliance];
+
+    for (const rule of dsl.startRules || []) {
+      switch (rule.type) {
+        case "noOverlap": {
+          const grace = rule.grace || 0;
+          for (const o of obstacles) {
+            if (circleHitsPoly(x, y, r - grace, o.poly))
+              issues.push((rule.message || "Robot overlaps the {obstacle}").replace("{obstacle}", o.name));
+          }
+          break;
+        }
+        case "withinRegion": {
+          const reg = A.startRegion;
+          if (!reg) break;
+          const bad =
+            (reg.xMin !== undefined && x - r < reg.xMin) ||
+            (reg.xMax !== undefined && x + r > reg.xMax) ||
+            (reg.yMin !== undefined && y - r < reg.yMin) ||
+            (reg.yMax !== undefined && y + r > reg.yMax);
+          if (bad) issues.push((rule.message || "Outside {region}").replace("{region}", reg.label || "the start region"));
+          break;
+        }
+        case "overAnyLaunchLine": {
+          const ok = (dsl.launchLines || []).some(([[x1, y1], [x2, y2]]) => distToSeg(x, y, x1, y1, x2, y2) <= r);
+          if (!ok) issues.push(rule.message || "Must be over a launch line");
+          break;
+        }
+        case "touchingAny": {
+          let ok = false;
+          for (const t of rule.targets || []) {
+            if (t === "perimeter" && (x - r <= 0.5 || x + r >= S - 0.5 || y - r <= 0.5 || y + r >= S - 0.5)) ok = true;
+            if (t === "ownGoal") {
+              const g = obstacles.find(o => o.owner === alliance && o.role === "goal");
+              if (g && circleNearPolyEdge(x, y, r + 1, g.poly)) ok = true;
+            }
+            if (t === "anyStructure") {
+              if (obstacles.some(o => circleNearPolyEdge(x, y, r + 1, o.poly))) ok = true;
+            }
+          }
+          if (!ok) issues.push(rule.message || "Must touch a legal surface");
+          break;
+        }
+        case "insideField": {
+          if (x - r < 0 || x + r > S || y - r < 0 || y + r > S)
+            issues.push(rule.message || "Robot must be fully inside the field");
+          break;
+        }
+        default:
+          issues.push(`Unknown rule type "${rule.type}" in season pack`);
+      }
+    }
+    return issues;
+  };
+
+  /* Emit templates: "{key}" substitutes a param, "{key:ms}" converts seconds to
+   * milliseconds, "@myTag" as a default resolves to the alliance's tag. */
+  const renderEmit = (action, params, ctx) => {
+    const def = dsl.actions.find(a => a.id === action);
+    if (!def || !def.emit) return [];
+    const resolve = (key) => {
+      let v = params[key];
+      if (v === undefined || v === "" || v === null) {
+        const p = (def.params || []).find(pp => pp.key === key);
+        v = p ? p.default : "";
+        if (v === "@myTag") v = ctx.myTag;
+      }
+      return v;
+    };
+    return def.emit.map(tpl =>
+      tpl.replace(/\{(\w+)(?::(\w+))?\}/g, (_, key, fmt) => {
+        const v = resolve(key);
+        if (fmt === "ms") return String(Math.round(Number(v) * 1000));
+        if (fmt === "int") return String(Math.round(Number(v)));
+        return String(v);
+      })
+    );
+  };
+
+  const actionDuration = (action, params) => {
+    const def = dsl.actions.find(a => a.id === action);
+    if (!def) return 0;
+    if (def.durationFrom && params[def.durationFrom] !== undefined) return Number(params[def.durationFrom]) || 0;
+    return def.est || 0;
+  };
+
+  return {
+    dsl,
+    id: dsl.id,
+    name: dsl.name,
+    years: dsl.years || "",
+    verified: !!dsl.verified,
+    source: dsl.source || "",
+    field: dsl.field,
+    columns: dsl.field.columns,
+    audienceLabel: dsl.field.audienceLabel || "AUDIENCE",
+    autoSeconds: dsl.autoSeconds || null,
+    alliances: dsl.alliances,
+    geometry: dsl.geometry,
+    tags: dsl.tags || [],
+    offFieldTags: dsl.offFieldTags || [],
+    obstacles,
+    launchLines: dsl.launchLines || [],
+    actions: dsl.actions,
+    codeNotes: dsl.codeNotes || [],
+    mirror: { point: mirrorPoint, heading: mirrorHeading, tag: mirrorTag, at: dsl.mirror.at, axis: dsl.mirror.axis },
+    getPresets,
+    validateStart,
+    renderEmit,
+    actionDuration,
+  };
+}
+
+/* ------------------------------------------------- stop-at-waypoint model - */
+/* Every move is: accelerate, cruise, decelerate, settle. No blending between
+ * waypoints. Mecanum can translate and rotate at once, so a leg costs
+ * max(translate, rotate) rather than their sum. */
+
+const DEFAULT_MOTION = {
+  maxVelocity: 40,      // in/s
+  maxAccel: 60,         // in/s^2
+  turnRate: 180,        // deg/s
+  posTolerance: 1.0,    // in
+  headingTolerance: 2,  // deg
+  settleTime: 0.15,     // s
+  runawayMargin: 4.0,   // in — abort if the error grows this far past its start
+  timeoutBase: 1.5,     // s of slack per leg
+  timeoutFactor: 2.5,   // multiple of the estimated leg time
+  timeoutCeiling: 8.0,  // s hard cap
+  transP: 0.060, transI: 0.000, transD: 0.006,
+  headP: 0.020, headI: 0.000, headD: 0.002,
+  minPower: 0.08, maxPower: 0.80,
+};
+
+const trapezoidTime = (d, vMax, aMax) => {
+  if (d <= 0) return 0;
+  if (!vMax || !aMax) return 0;
+  const dAccel = (vMax * vMax) / aMax;   // distance to reach vMax and come back down
+  if (d < dAccel) return 2 * Math.sqrt(d / aMax);
+  return d / vMax + vMax / aMax;
+};
+
+const headingDelta = (from, to) => {
+  let d = Math.abs(((to - from) % 360 + 540) % 360 - 180);
+  return d;
+};
+
+const legTime = (from, to, motion) => {
+  const d = Math.hypot(to.x - from.x, to.y - from.y);
+  const drive = trapezoidTime(d, motion.maxVelocity, motion.maxAccel);
+  const turn = headingDelta(from.heading, to.heading) / (motion.turnRate || 1);
+  return Math.max(drive, turn) + motion.settleTime;
+};
+
+const estimatePath = (startPose, waypoints, motion, season) => {
+  const legs = [];
+  let prev = startPose;
+  let total = 0;
+  waypoints.forEach((wp) => {
+    const move = legTime(prev, wp, motion);
+    const act = season.actionDuration(wp.action, wp.actionParams || {});
+    legs.push({ id: wp.id, move, action: act, cumulative: total + move + act });
+    total += move + act;
+    prev = wp;
+  });
+  return { legs, total };
+};
+
+/* ============================================================================
+ * Built-in season packs — pure data, no functions.
+ * Any of these can be exported to .json and loaded by another team's PathPilot.
+ * ==========================================================================*/
+
+const DECODE_PACK = {
+  pathpilotSeason: 1,
+  id: "decode-2025",
+  name: "DECODE",
+  years: "2025-2026",
+  verified: true,
+  source: "FTC Competition Manual TU32 — figures 9-2, 9-3, 9-5, 9-18; rule G304",
+  autoSeconds: 30,
+
+  field: { size: 144, tile: 24, columns: ["A", "B", "C", "D", "E", "F"], audienceLabel: "AUDIENCE" },
+
+  alliances: {
+    blue: {
+      color: "#3B82F6", label: "Blue", areaSide: "right", tag: 20,
+      startRegion: { xMin: 0, xMax: 72, label: "columns A-C" },
+    },
+    red: {
+      color: "#EF4444", label: "Red", areaSide: "left", tag: 24,
+      startRegion: { xMin: 72, xMax: 144, label: "columns D-F" },
+    },
+  },
+
+  mirror: { axis: "x", at: 72, tagSwap: { 20: 24, 24: 20 } },
+
+  geometry: {
+    polygons: [
+      { key: "lz-goal", kind: "launch", points: [[0, 144], [144, 144], [72, 72]], label: "LAUNCH ZONE", labelAt: [72, 120] },
+      { key: "lz-aud", kind: "launch", points: [[48, 0], [96, 0], [72, 24]], label: "LAUNCH", labelAt: [72, 8] },
+      { key: "goal-blue", kind: "structure", owner: "blue", points: [[0, 144], [38, 144], [0, 106]], label: "GOAL", labelAt: [13, 131] },
+      { key: "goal-red", kind: "structure", owner: "red", points: [[144, 144], [106, 144], [144, 106]], label: "GOAL", labelAt: [131, 131] },
+    ],
+    rects: [
+      { key: "cls-blue", owner: "blue", x: 0, y: 74, width: 10, height: 48 },
+      { key: "cls-red", owner: "red", x: 134, y: 74, width: 10, height: 48 },
+      { key: "gate-blue", owner: "blue", x: 5, y: 71.25, width: 10, height: 2.75 },
+      { key: "gate-red", owner: "red", x: 129, y: 71.25, width: 10, height: 2.75 },
+      { key: "tun-red", owner: "red", x: 0, y: 24, width: 6.125, height: 46.5 },
+      { key: "tun-blue", owner: "blue", x: 137.875, y: 24, width: 6.125, height: 46.5 },
+      { key: "base-red", owner: "red", x: 27, y: 27, width: 18, height: 18, label: "BASE", dashed: true },
+      { key: "base-blue", owner: "blue", x: 99, y: 27, width: 18, height: 18, label: "BASE", dashed: true },
+      { key: "load-red", owner: "red", x: 0, y: 0, width: 23, height: 23, label: "LOADING" },
+      { key: "load-blue", owner: "blue", x: 121, y: 0, width: 23, height: 23, label: "LOADING" },
+    ],
+    tapeLines: [
+      { key: "depot-blue", owner: "blue", from: [10.5, 112.3], to: [31.7, 133.5] },
+      { key: "depot-red", owner: "red", from: [133.5, 112.3], to: [112.3, 133.5] },
+    ],
+    markers: [
+      { x: 12, y: 36, len: 10, motif: "GPP" }, { x: 12, y: 60, len: 10, motif: "PGP" },
+      { x: 12, y: 84, len: 10, motif: "PPG" }, { x: 122, y: 36, len: 10, motif: "GPP" },
+      { x: 122, y: 60, len: 10, motif: "PGP" }, { x: 122, y: 84, len: 10, motif: "PPG" },
+    ],
+    markerColors: { G: "#22C55E", P: "#A855F7" },
+  },
+
+  tags: [
+    { id: 20, owner: "blue", x: 18.5, y: 125.5 },
+    { id: 24, owner: "red", x: 125.5, y: 125.5 },
+  ],
+  offFieldTags: [
+    { ids: "21/22/23", label: "OBELISK", x: 72, y: 144, note: "MOTIF only — not for navigation" },
+  ],
+
+  obstacles: [
+    { name: "Blue GOAL", owner: "blue", role: "goal", shape: { type: "polygon", points: [[0, 144], [38, 144], [0, 106]] } },
+    { name: "Red GOAL", owner: "red", role: "goal", shape: { type: "polygon", points: [[144, 144], [106, 144], [144, 106]] } },
+    { name: "Blue CLASSIFIER", owner: "blue", shape: { type: "rect", x: 0, y: 74, width: 10, height: 48 } },
+    { name: "Red CLASSIFIER", owner: "red", shape: { type: "rect", x: 134, y: 74, width: 10, height: 48 } },
+  ],
+
+  launchLines: [
+    [[0, 144], [72, 72]], [[144, 144], [72, 72]],
+    [[48, 0], [72, 24]], [[96, 0], [72, 24]],
+    [[10.5, 112.3], [31.7, 133.5]], [[133.5, 112.3], [112.3, 133.5]],
+  ],
+
+  /* Authored for blue, mirrored for red. Along the side wall the goal-side
+   * LAUNCH LINE runs inside the GOAL footprint, so only the DEPOT tape and the
+   * audience-side LAUNCH ZONE produce legal starts. */
+  presetsDefinedFor: "blue",
+  startPresets: [
+    { id: "depotFacing", label: "{Alliance} depot, facing goal", x: "19 + (r + 0.2) / SQRT2", y: "125 - (r + 0.2) / SQRT2", heading: 315 },
+    { id: "depotAway", label: "{Alliance} depot, facing field", x: "19 + (r + 0.2) / SQRT2", y: "125 - (r + 0.2) / SQRT2", heading: 135 },
+    { id: "audience", label: "Audience launch line", x: "48 + r", y: "r", heading: 0 },
+  ],
+
+  startRules: [
+    { type: "noOverlap", grace: 1, message: "Robot overlaps the {obstacle}" },
+    { type: "withinRegion", message: "G304.C: must be fully inside {region}" },
+    { type: "overAnyLaunchLine", message: "G304.A: must be over a LAUNCH LINE" },
+    { type: "touchingAny", targets: ["perimeter", "ownGoal"], message: "G304.B: must touch own GOAL or the FIELD perimeter" },
+  ],
+
+  actions: [
+    { id: "none", label: "None", icon: "⬆️", est: 0 },
+    { id: "wait", label: "Wait", icon: "⏱️", est: 1, durationFrom: "time",
+      params: [{ key: "time", label: "Wait time (sec)", type: "number", default: 1, step: 0.1, min: 0.1 }],
+      emit: ["sleep({time:ms});"] },
+    { id: "faceTag", label: "Face AprilTag", icon: "👁️", est: 0.6,
+      params: [{ key: "tagId", label: "Tag ID", type: "tagId", default: "@myTag" }],
+      emit: ["faceAprilTag({tagId});"] },
+    { id: "driveToTag", label: "Drive to AprilTag", icon: "🏷️", est: 1.5,
+      params: [
+        { key: "tagId", label: "Tag ID", type: "tagId", default: "@myTag" },
+        { key: "distance", label: "Distance (in)", type: "number", default: 12, step: 0.5 },
+      ],
+      emit: ["driveToAprilTag({tagId}, {distance});"] },
+    { id: "readMotif", label: "Read MOTIF (obelisk)", icon: "🔍", est: 0.5,
+      emit: ["int motif = readObeliskMotif();  // 21/22/23 -> GPP, PGP, PPG"] },
+    { id: "macro", label: "Robot macro", icon: "📋", est: 1.0,
+      params: [{ key: "macroMethod", label: "Macro", type: "macro", default: "" }],
+      emit: ["{macroMethod}();"] },
+  ],
+
+  codeNotes: [
+    "AUTO period is 30 seconds",
+    "OBELISK tags 21/22/23 encode the MOTIF and must not be used for navigation",
+  ],
+};
+
+const BLANK_PACK = {
+  pathpilotSeason: 1,
+  id: "blank-144",
+  name: "Blank practice field",
+  years: "",
+  verified: false,
+  source: "Generic 12ft x 12ft FTC field",
+  autoSeconds: 30,
+
+  field: { size: 144, tile: 24, columns: ["A", "B", "C", "D", "E", "F"], audienceLabel: "AUDIENCE" },
+  alliances: {
+    blue: { color: "#3B82F6", label: "Blue", areaSide: "right", tag: null, startRegion: { label: "anywhere" } },
+    red: { color: "#EF4444", label: "Red", areaSide: "left", tag: null, startRegion: { label: "anywhere" } },
+  },
+  mirror: { axis: "x", at: 72, tagSwap: {} },
+  geometry: { polygons: [], rects: [], tapeLines: [], markers: [], markerColors: {} },
+  tags: [], offFieldTags: [], obstacles: [], launchLines: [],
+
+  presetsDefinedFor: "blue",
+  startPresets: [
+    { id: "center", label: "Center of field", x: "half", y: "half", heading: 0 },
+    { id: "nearWall", label: "Against near wall", x: "half", y: "r", heading: 0 },
+    { id: "corner", label: "{Alliance}-side near corner", x: "r", y: "r", heading: 0 },
+  ],
+  startRules: [
+    { type: "insideField", message: "Robot must be fully inside the field" },
+  ],
+
+  actions: [
+    { id: "none", label: "None", icon: "⬆️", est: 0 },
+    { id: "wait", label: "Wait", icon: "⏱️", est: 1, durationFrom: "time",
+      params: [{ key: "time", label: "Wait time (sec)", type: "number", default: 1, step: 0.1, min: 0.1 }],
+      emit: ["sleep({time:ms});"] },
+    { id: "macro", label: "Robot macro", icon: "📋", est: 1.0,
+      params: [{ key: "macroMethod", label: "Macro", type: "macro", default: "" }],
+      emit: ["{macroMethod}();"] },
+  ],
+  codeNotes: [],
+};
+
+const BUILTIN_PACKS = [DECODE_PACK, BLANK_PACK];
+
+/* ============================================================================
+ * Self-contained OpMode generator.
+ *
+ * Everything the autonomous needs lives inside one class: odometry, motion,
+ * vision, mechanism macros, and the path. No helper classes, because two
+ * OpMode files in the same package cannot each define `class Localizer` —
+ * duplicate class, compile error. Private methods inside the OpMode collide
+ * with nothing, so every generated auto is independent.
+ *
+ * The trade: a change to a shared value means regenerating every auto. That is
+ * a button press rather than a forgotten file, which is the failure mode that
+ * actually bites at a competition.
+ * ==========================================================================*/
+
+const DEFAULT_ODOMETRY = {
+  parallel: { hardwareName: "frontRight", reversed: true, ticksPerInch: 505.2, xOffsetIn: 0 },
+  perpendicular: { hardwareName: "frontLeft", reversed: true, ticksPerInch: 505.2, yOffsetIn: 0 },
+  calibration: { status: "uncalibrated" },
+};
+
+const DEFAULT_DRIVE_NAMES = { frontLeft: "frontLeft", frontRight: "frontRight", backLeft: "backLeft", backRight: "backRight" };
+
+const javaClassName = (s) => {
+  const parts = String(s || "").replace(/[^A-Za-z0-9 ]/g, " ").trim().split(/\s+/);
+  if (!parts.length || !parts[0]) return "PathPilotAuto";
+  return parts.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
+};
+
+function generateOpMode({ className, season, alliance, startPose, waypoints, motion, profile, timing }) {
+  const A = season.alliances[alliance];
+  const myTag = A.tag;
+  const ctx = { myTag, alliance, season };
+
+  const odo = (profile && profile.odometry) || DEFAULT_ODOMETRY;
+  const noOdometry = !!(profile && profile.odometry && profile.odometry.type === "none");
+  const par = odo.parallel || DEFAULT_ODOMETRY.parallel;
+  const per = odo.perpendicular || DEFAULT_ODOMETRY.perpendicular;
+  const calibrated = odo.calibration && odo.calibration.status === "calibrated";
+
+  const driveMotors = (profile && profile.drive && profile.drive.motors) || null;
+  const driveNames = driveMotors
+    ? Object.keys(driveMotors).reduce((acc, k) => { acc[k] = driveMotors[k].hardwareName || k; return acc; }, {})
+    : DEFAULT_DRIVE_NAMES;
+  const fl = driveNames.frontLeft || "frontLeft";
+  const fr = driveNames.frontRight || "frontRight";
+  const bl = driveNames.backLeft || "backLeft";
+  const br = driveNames.backRight || "backRight";
+
+  // Motor directions come from the profile, not from an assumption about which
+  // side is which. Default to the usual mecanum arrangement only when unknown.
+  const dirOf = (role, fallback) => {
+    if (driveMotors && driveMotors[role] && driveMotors[role].reversed !== undefined) {
+      return !!driveMotors[role].reversed;
+    }
+    return fallback;
+  };
+  const revFL = dirOf("frontLeft", true);
+  const revFR = dirOf("frontRight", false);
+  const revBL = dirOf("backLeft", true);
+  const revBR = dirOf("backRight", false);
+
+  /* setDirection(REVERSE) also negates getCurrentPosition(). A pod plugged into
+   * a reversed motor's encoder port therefore reads with the opposite sign here
+   * than it did in the calibration OpMode, which sets no directions at all.
+   *
+   * Measured on GoBilda1: bare encoder read -7634 for a nose-first push, so the
+   * pod's own reversal is true; with backLeft set REVERSE the same push read
+   * +7634, and the pose ran backwards. XOR resolves the two frames.
+   */
+  const hostReversedFor = (pod) => {
+    if (!driveMotors || !pod || !pod.hardwareName) return false;
+    const entry = Object.values(driveMotors).find(m => m.hardwareName === pod.hardwareName);
+    return entry ? !!entry.reversed : false;
+  };
+  const parHostRev = hostReversedFor(par);
+  const perHostRev = hostReversedFor(per);
+  const parEffectiveRev = !!par.reversed !== parHostRev;   // XOR
+  const perEffectiveRev = !!per.reversed !== perHostRev;
+
+  const hasLimelight = !!(profile && profile.limelight && profile.limelight.present) || season.tags.length > 0;
+  const pipeline = (profile && profile.limelight && profile.limelight.pipeline) || 0;
+
+  // Only the macros this path actually calls get emitted.
+  const usedMethods = new Set(
+    waypoints.filter(w => w.action === "macro" && w.actionParams && w.actionParams.macroMethod)
+             .map(w => w.actionParams.macroMethod));
+  const allMacros = (profile && profile.macros) || [];
+  const macros = allMacros.filter(m => usedMethods.has(m.method) && m.java);
+
+  const macroMotors = new Set();
+  const macroServos = new Set();
+  const macroPatterns = new Map();
+  let macroBlinkin = false;
+  macros.forEach(m => {
+    (m.java.motors || []).forEach(x => macroMotors.add(x));
+    (m.java.servos || []).forEach(x => macroServos.add(x));
+    if (m.java.usesBlinkin) macroBlinkin = true;
+    (m.java.patterns || []).forEach(p => macroPatterns.set(p.constant, p.value));
+  });
+
+  const usesVision = waypoints.some(w => ["faceTag", "driveToTag", "readMotif"].includes(w.action));
+  const needLimelight = hasLimelight && usesVision;
+
+  const L = [];
+  const P = (...lines) => lines.forEach(l => L.push(l));
+
+  if (noOdometry) {
+    return [
+      "// " + className + " cannot be generated.",
+      "//",
+      "// The loaded robot profile reports no odometry (odometry.type = \"none\").",
+      "// Every waypoint in this path is a field coordinate, and driveTo closes the",
+      "// loop on the robot's measured position — without pods there is nothing to",
+      "// measure, so the generated code would drive blind.",
+      "//",
+      "// Either fit odometry and configure it in BotBuilder, or drive this routine",
+      "// from TeleOp macros instead of a PathPilot path.",
+    ].join("\n");
+  }
+
+  /* ---------------- header ---------------- */
+  P("package org.firstinspires.ftc.teamcode;",
+    "",
+    "import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;");
+  if (needLimelight) {
+    P("import com.qualcomm.hardware.limelightvision.LLResult;",
+      "import com.qualcomm.hardware.limelightvision.LLResultTypes;",
+      "import com.qualcomm.hardware.limelightvision.Limelight3A;");
+  }
+  P("import com.qualcomm.robotcore.eventloop.opmode.Autonomous;",
+    "import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;",
+    "import com.qualcomm.robotcore.hardware.DcMotor;",
+    "import com.qualcomm.robotcore.hardware.DcMotorEx;",
+    "import com.qualcomm.robotcore.hardware.DcMotorSimple;",
+    "import com.qualcomm.robotcore.hardware.IMU;");
+  if (macroServos.size || macroBlinkin) P("import com.qualcomm.robotcore.hardware.Servo;");
+  P("import com.qualcomm.robotcore.util.ElapsedTime;",
+    "",
+    "import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;");
+  if (needLimelight) {
+    P("import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;",
+      "import org.firstinspires.ftc.robotcore.external.navigation.Position;");
+  }
+  if (needLimelight) P("", "import java.util.List;");
+  P("");
+
+  /* ---------------- doc comment ---------------- */
+  P("/**",
+    ` * ${className} — generated by PathPilot.`,
+    " *",
+    ` * Game: ${season.name} ${season.years}`,
+    ` * Alliance: ${alliance.toUpperCase()}`,
+    ` * Estimated runtime: ${timing.total.toFixed(1)}s${season.autoSeconds ? ` of ${season.autoSeconds}s AUTO` : ""}`,
+    " *",
+    " * FIELD COORDINATES (audience view)",
+    " *   (0,0) is the bottom-left corner. +X right, +Y away from the audience.",
+    " *   heading 0 faces +Y and increases CLOCKWISE (90 faces +X).",
+    " *",
+    " * MOTION MODEL: stop-at-waypoint",
+    " *   Each leg accelerates, cruises, decelerates, then settles inside",
+    " *   tolerance before the next begins. No blending between waypoints.",
+    " *",
+    " * This file is self-contained — nothing else needs to be on the Hub.",
+    " * Regenerate it from PathPilot rather than hand-editing; a tuning change",
+    " * here will be lost, and will not reach your other autos.");
+  if (!calibrated) {
+    P(" *",
+      " * WARNING: odometry is not calibrated. The ticks-per-inch and pod offsets",
+      " * below are theoretical. Run OdometryCalibration and update them, or every",
+      " * position in this path is approximate.");
+  }
+  P(" */",
+    `@Autonomous(name = "${className}", group = "PathPilot")`,
+    `public class ${className} extends LinearOpMode {`,
+    "");
+
+  /* ---------------- constants ---------------- */
+  P("    // ================= tuning (PathPilot Motion tab) =================",
+    `    public static final double MAX_VELOCITY = ${motion.maxVelocity};        // in/s`,
+    `    public static final double MAX_ACCEL = ${motion.maxAccel};            // in/s^2`,
+    `    public static final double TURN_RATE = ${motion.turnRate};            // deg/s`,
+    `    public static final double POS_TOLERANCE = ${motion.posTolerance};        // in`,
+    `    public static final double HEADING_TOLERANCE = ${motion.headingTolerance};    // deg`,
+    `    public static final double SETTLE_TIME = ${motion.settleTime};         // s inside tolerance`,
+    `    public static final double TIMEOUT_BASE = ${motion.timeoutBase};        // s slack per leg`,
+    `    public static final double TIMEOUT_FACTOR = ${motion.timeoutFactor};      // multiple of the estimate`,
+    `    public static final double TIMEOUT_CEILING = ${motion.timeoutCeiling};     // s hard cap`,
+    "    /* If the error grows well past where it started, the pose is lying —",
+    "     * usually an inverted pod. Stopping after a couple of inches of divergence",
+    "     * beats driving at full power until the timeout expires. */",
+    `    public static final double RUNAWAY_MARGIN = ${motion.runawayMargin};      // in`,
+    `    public static final double MIN_POWER = ${motion.minPower};           // beats static friction`,
+    `    public static final double MAX_POWER = ${motion.maxPower};`,
+    "",
+    `    public static final double TRANS_KP = ${motion.transP};`,
+    `    public static final double TRANS_KI = ${motion.transI};`,
+    `    public static final double TRANS_KD = ${motion.transD};`,
+    `    public static final double HEAD_KP = ${motion.headP};`,
+    `    public static final double HEAD_KI = ${motion.headI};`,
+    `    public static final double HEAD_KD = ${motion.headD};`,
+    "    public static final double I_LIMIT = 5.0;",
+    "");
+
+  P("    // ================= odometry =================",
+    `    // ${calibrated ? "Calibrated " + (odo.calibration.date || "") : "THEORETICAL — run OdometryCalibration and replace these"}`,
+    `    public static final double PARALLEL_TICKS_PER_INCH = ${par.ticksPerInch || 505.2};`,
+    `    public static final double PERPENDICULAR_TICKS_PER_INCH = ${per.ticksPerInch || 505.2};`,
+    "    /** Parallel pod's lateral offset from centre, + right. */",
+    `    public static final double PARALLEL_X_OFFSET = ${par.xOffsetIn || 0};`,
+    "    /** Perpendicular pod's forward offset from centre, + forward. */",
+    `    public static final double PERPENDICULAR_Y_OFFSET = ${per.yOffsetIn || 0};`,
+    `    // Pod reversal ${!!par.reversed} XOR host motor "${par.hardwareName}" direction`,
+    `    // ${parHostRev ? "REVERSE" : "FORWARD"} = ${parEffectiveRev}. setDirection also negates the encoder,`,
+    "    // so this differs from the value stored in BotBuilder. That is deliberate.",
+    `    public static final boolean PARALLEL_REVERSED = ${parEffectiveRev};`,
+    `    // Pod reversal ${!!per.reversed} XOR host motor "${per.hardwareName}" direction`,
+    `    // ${perHostRev ? "REVERSE" : "FORWARD"} = ${perEffectiveRev}.`,
+    `    public static final boolean PERPENDICULAR_REVERSED = ${perEffectiveRev};`,
+    "");
+
+  if (macroServos.size || macroBlinkin) {
+    P("    // ================= mechanisms =================",
+      "    public static final double SERVO_SETTLE = 0.30;");
+    macroPatterns.forEach((v, k) => P(`    public static final double ${k} = ${v};`));
+    P("");
+  }
+
+  P("    // ================= starting pose =================",
+    "    // Place the robot here before the match.",
+    `    public static final double START_X = ${startPose.x.toFixed(1)};`,
+    `    public static final double START_Y = ${startPose.y.toFixed(1)};`,
+    `    public static final double START_HEADING = ${startPose.heading};`,
+    "");
+  if (myTag) P(`    public static final int GOAL_TAG = ${myTag};`, "");
+
+  /* ---------------- fields ---------------- */
+  P("    private DcMotor frontLeft, frontRight, backLeft, backRight;",
+    "    private DcMotorEx parallelPod, perpendicularPod;",
+    "    private IMU imu;");
+  if (needLimelight) P("    private Limelight3A limelight;");
+  Array.from(macroMotors).forEach(m => P(`    private DcMotorEx ${m};`));
+  Array.from(macroServos).forEach(m => P(`    private Servo ${m};`));
+  if (macroBlinkin) P("    private Servo blinkin;");
+  P("",
+    "    private double poseX, poseY, poseHeading;",
+    "    private int lastParallelTicks, lastPerpendicularTicks;",
+    "    private double lastHeading, seedYaw, seedHeading;",
+    "",
+    "    private final ElapsedTime legTimer = new ElapsedTime();",
+    "    private final ElapsedTime settleTimer = new ElapsedTime();",
+    "    private final ElapsedTime macroTimer = new ElapsedTime();",
+    "    private int legIndex = 0;",
+    "    private boolean aborted = false;",
+    "");
+
+  /* ---------------- runOpMode ---------------- */
+  P("    @Override",
+    "    public void runOpMode() {",
+    "        initHardware();",
+    "        setPose(START_X, START_Y, START_HEADING);",
+    "",
+    '        telemetry.addLine("PathPilot ready");',
+    '        telemetry.addData("start", "%.1f, %.1f @ %.0f", START_X, START_Y, START_HEADING);');
+  if (!calibrated) P('        telemetry.addLine("odometry NOT calibrated - positions approximate");');
+  P("        telemetry.update();",
+    "",
+    "        waitForStart();",
+    "        if (isStopRequested()) return;",
+    "");
+  if (needLimelight) P("        if (limelight != null) limelight.start();", "");
+
+  /* ---------------- the path ---------------- */
+  P("        // ================= path =================");
+  // Once a leg fails the pose is no longer trustworthy, and every later
+  // waypoint is measured from a position the robot is not at. Continuing is
+  // worse than stopping, so each leg gates the rest of the path.
+  waypoints.forEach((wp, i) => {
+    const leg = timing.legs[i];
+    P(`        // Waypoint ${i + 1} — (${wp.x.toFixed(1)}, ${wp.y.toFixed(1)}) @ ${wp.heading}deg  [~${leg.move.toFixed(1)}s]`);
+    P(`        if (!driveTo(${wp.x.toFixed(1)}, ${wp.y.toFixed(1)}, ${wp.heading})) { finish(); return; }`);
+    season.renderEmit(wp.action, wp.actionParams || {}, ctx).forEach(line => P(`        ${line}`));
+    P("");
+  });
+
+  P("        finish();",
+    "    }",
+    "");
+
+  P("    /** Stops everything and reports. Called on completion or on a failed leg. */",
+    "    private void finish() {",
+    "        stopDrive();");
+  if (needLimelight) P("        if (limelight != null) limelight.stop();");
+  P('        telemetry.addLine(aborted ? "PATH ABORTED - see the reason above" : "Path complete");',
+    '        telemetry.addData("final pose", "%.1f, %.1f @ %.0f", poseX, poseY, poseHeading);',
+    '        telemetry.addData("legs completed", legIndex + (aborted ? " (last one failed)" : ""));',
+    "        telemetry.update();",
+    "    }",
+    "");
+
+  /* ---------------- init ---------------- */
+  P("    // ================= hardware =================",
+    "    private void initHardware() {",
+    `        frontLeft = hardwareMap.get(DcMotor.class, "${fl}");`,
+    `        frontRight = hardwareMap.get(DcMotor.class, "${fr}");`,
+    `        backLeft = hardwareMap.get(DcMotor.class, "${bl}");`,
+    `        backRight = hardwareMap.get(DcMotor.class, "${br}");`,
+    "",
+    `        frontLeft.setDirection(DcMotorSimple.Direction.${revFL ? "REVERSE" : "FORWARD"});`,
+    `        backLeft.setDirection(DcMotorSimple.Direction.${revBL ? "REVERSE" : "FORWARD"});`,
+    `        frontRight.setDirection(DcMotorSimple.Direction.${revFR ? "REVERSE" : "FORWARD"});`,
+    `        backRight.setDirection(DcMotorSimple.Direction.${revBR ? "REVERSE" : "FORWARD"});`,
+    "",
+    "        frontLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);",
+    "        frontRight.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);",
+    "        backLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);",
+    "        backRight.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);",
+    "",
+    "        // The pods occupy these motors' encoder ports, so the drive motors",
+    "        // must stay in RUN_WITHOUT_ENCODER — their encoders read the pod.",
+    "        frontLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);",
+    "        frontRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);",
+    "        backLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);",
+    "        backRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);",
+    "",
+    `        parallelPod = hardwareMap.get(DcMotorEx.class, "${par.hardwareName || "frontRight"}");`,
+    `        perpendicularPod = hardwareMap.get(DcMotorEx.class, "${per.hardwareName || "frontLeft"}");`,
+    "",
+    '        imu = hardwareMap.get(IMU.class, "imu");',
+    "        imu.initialize(new IMU.Parameters(new RevHubOrientationOnRobot(",
+    `                RevHubOrientationOnRobot.LogoFacingDirection.${(profile && profile.imu && profile.imu.logoDirection) || "UP"},`,
+    `                RevHubOrientationOnRobot.UsbFacingDirection.${(profile && profile.imu && profile.imu.usbDirection) || "FORWARD"})));`,
+    "        imu.resetYaw();",
+    "");
+  Array.from(macroMotors).forEach(m => {
+    P(`        ${m} = hardwareMap.get(DcMotorEx.class, "${m}");`);
+    P(`        ${m}.setMode(DcMotor.RunMode.RUN_USING_ENCODER);`);
+  });
+  Array.from(macroServos).forEach(m => P(`        ${m} = hardwareMap.get(Servo.class, "${m}");`));
+  if (macroBlinkin) P('        blinkin = hardwareMap.get(Servo.class, "blinkin");');
+  if (needLimelight) {
+    P("",
+      '        limelight = hardwareMap.get(Limelight3A.class, "limelight");',
+      `        if (limelight != null) limelight.pipelineSwitch(${pipeline});`);
+  }
+  P("    }", "");
+
+  /* ---------------- odometry ---------------- */
+  P("    // ================= odometry =================",
+    "    /** Declares where the robot is. Also used after an AprilTag fix. */",
+    "    private void setPose(double x, double y, double headingDeg) {",
+    "        poseX = x;",
+    "        poseY = y;",
+    "        poseHeading = normalize(headingDeg);",
+    "        seedHeading = poseHeading;",
+    "        seedYaw = rawYaw();",
+    "        lastParallelTicks = readParallel();",
+    "        lastPerpendicularTicks = readPerpendicular();",
+    "        lastHeading = poseHeading;",
+    "    }",
+    "",
+    "    /**",
+    "     * Integrates one step of two-pod plus IMU odometry.",
+    "     *",
+    "     * A pod that is not at the centre of rotation registers ticks when the",
+    "     * robot spins in place even though it has not translated. The offset terms",
+    "     * cancel that. Leave them at zero and every turn injects error.",
+    "     */",
+    "    private void updatePose() {",
+    "        // IMU yaw is counter-clockwise positive; heading is clockwise positive.",
+    "        double fieldHeading = normalize(seedHeading - (rawYaw() - seedYaw));",
+    "",
+    "        int parallelTicks = readParallel();",
+    "        int perpendicularTicks = readPerpendicular();",
+    "        double parallelInches = (parallelTicks - lastParallelTicks) / PARALLEL_TICKS_PER_INCH;",
+    "        double perpendicularInches = (perpendicularTicks - lastPerpendicularTicks) / PERPENDICULAR_TICKS_PER_INCH;",
+    "        lastParallelTicks = parallelTicks;",
+    "        lastPerpendicularTicks = perpendicularTicks;",
+    "",
+    "        double deltaHeadingDeg = wrap(fieldHeading - lastHeading);",
+    "        double deltaHeadingRad = Math.toRadians(deltaHeadingDeg);",
+    "        lastHeading = fieldHeading;",
+    "",
+    "        double deltaForward = parallelInches + deltaHeadingRad * PARALLEL_X_OFFSET;",
+    "        double deltaLeft = perpendicularInches + deltaHeadingRad * PERPENDICULAR_Y_OFFSET;",
+    "",
+    "        // Integrate about the midpoint heading of the step.",
+    "        double mid = Math.toRadians(fieldHeading - deltaHeadingDeg / 2.0);",
+    "        double sin = Math.sin(mid), cos = Math.cos(mid);",
+    "        // forward maps to (sin, cos); left maps to (-cos, sin)",
+    "        poseX += deltaForward * sin - deltaLeft * cos;",
+    "        poseY += deltaForward * cos + deltaLeft * sin;",
+    "        poseHeading = fieldHeading;",
+    "    }",
+    "",
+    "    private double rawYaw() {",
+    "        return imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES);",
+    "    }",
+    "",
+    "    private int readParallel() {",
+    "        int t = parallelPod.getCurrentPosition();",
+    "        return PARALLEL_REVERSED ? -t : t;",
+    "    }",
+    "",
+    "    private int readPerpendicular() {",
+    "        int t = perpendicularPod.getCurrentPosition();",
+    "        return PERPENDICULAR_REVERSED ? -t : t;",
+    "    }",
+    "",
+    "    /** Folds an angle into [0, 360). */",
+    "    private static double normalize(double deg) {",
+    "        double d = deg % 360.0;",
+    "        if (d < 0) d += 360.0;",
+    "        return d;",
+    "    }",
+    "",
+    "    /** Folds an angle into (-180, 180]. */",
+    "    private static double wrap(double deg) {",
+    "        double d = (deg + 180.0) % 360.0;",
+    "        if (d <= 0) d += 360.0;",
+    "        return d - 180.0;",
+    "    }",
+    "");
+
+  /* ---------------- motion ---------------- */
+  P("    // ================= motion =================",
+    "    /** Drives to a field pose and settles. False if the leg timed out. */",
+    "    private boolean driveTo(double targetX, double targetY, double targetHeadingDeg) {",
+    "        legIndex++;",
+    "        legTimer.reset();",
+    "        settleTimer.reset();",
+    "",
+    "        double lastPosError = Math.hypot(targetX - poseX, targetY - poseY);",
+    "        double lastHeadError = wrap(targetHeadingDeg - poseHeading);",
+    "        final double startPosError = lastPosError;",
+    "        boolean madeProgress = false;",
+    "        double timeout = legTimeout(lastPosError, lastHeadError);",
+    "        double posIntegral = 0, headIntegral = 0;",
+    "        double lastTime = legTimer.seconds();",
+    "        boolean inTolerance = false;",
+    "",
+    "        while (opModeIsActive()) {",
+    "            updatePose();",
+    "",
+    "            double now = legTimer.seconds();",
+    "            double dt = now - lastTime;",
+    "            if (dt <= 0) dt = 1e-3;",
+    "            lastTime = now;",
+    "",
+    "            double dx = targetX - poseX;",
+    "            double dy = targetY - poseY;",
+    "            double posError = Math.hypot(dx, dy);",
+    "            double headError = wrap(targetHeadingDeg - poseHeading);",
+    "",
+    "            boolean posOk = posError <= POS_TOLERANCE;",
+    "            boolean headOk = Math.abs(headError) <= HEADING_TOLERANCE;",
+    "",
+    "            if (posOk && headOk) {",
+    "                if (!inTolerance) { inTolerance = true; settleTimer.reset(); }",
+    "                if (settleTimer.seconds() >= SETTLE_TIME) { stopDrive(); return true; }",
+    "            } else {",
+    "                inTolerance = false;",
+    "            }",
+    "",
+    "            if (posError < startPosError - 1.0) madeProgress = true;",
+    "",
+    "            // Only a leg that never got closer at all is a runaway. Overshooting",
+    "            // or oscillating means the pose is real and the gains need work.",
+    "            if (!madeProgress && posError > startPosError + RUNAWAY_MARGIN) {",
+    "                stopDrive();",
+    "                aborted = true;",
+    '                telemetry.addLine("RUNAWAY on leg " + legIndex);',
+    '                telemetry.addData("error grew", "%.1f in -> %.1f in", startPosError, posError);',
+    '                telemetry.addLine("The pose is moving away from the target.");',
+    '                telemetry.addLine("Usually an odometry pod reading the wrong sign.");',
+    "                telemetry.update();",
+    "                return false;",
+    "            }",
+    "",
+    "            if (now > timeout) {",
+    "                stopDrive();",
+    "                aborted = true;",
+    '                telemetry.addData("TIMEOUT leg " + legIndex, "%.1f in / %.1f deg left", posError, headError);',
+    "                telemetry.update();",
+    "                return false;",
+    "            }",
+    "",
+    "            posIntegral = clamp(posIntegral + posError * dt, -I_LIMIT, I_LIMIT);",
+    "            headIntegral = clamp(headIntegral + headError * dt, -I_LIMIT, I_LIMIT);",
+    "            double posDeriv = (posError - lastPosError) / dt;",
+    "            double headDeriv = (headError - lastHeadError) / dt;",
+    "            lastPosError = posError;",
+    "            lastHeadError = headError;",
+    "",
+    "            double drivePower = clamp(TRANS_KP * posError + TRANS_KI * posIntegral + TRANS_KD * posDeriv,",
+    "                                      -MAX_POWER, MAX_POWER);",
+    "            if (!posOk && Math.abs(drivePower) < MIN_POWER) drivePower = Math.copySign(MIN_POWER, drivePower);",
+    "            if (posOk) drivePower = 0;",
+    "",
+    "            double turnPower = clamp(HEAD_KP * headError + HEAD_KI * headIntegral + HEAD_KD * headDeriv,",
+    "                                     -MAX_POWER, MAX_POWER);",
+    "            if (!headOk && Math.abs(turnPower) < MIN_POWER) turnPower = Math.copySign(MIN_POWER, turnPower);",
+    "            if (headOk) turnPower = 0;",
+    "",
+    "            // Field error into robot frame.",
+    "            double h = Math.toRadians(poseHeading);",
+    "            double sin = Math.sin(h), cos = Math.cos(h);",
+    "            double unitX = posError > 1e-6 ? dx / posError : 0;",
+    "            double unitY = posError > 1e-6 ? dy / posError : 0;",
+    "            double forward = unitX * sin + unitY * cos;",
+    "            double left = -unitX * cos + unitY * sin;",
+    "",
+    "            setMecanum(forward * drivePower, left * drivePower, turnPower);",
+    "",
+    '            telemetry.addData("leg", legIndex);',
+    '            telemetry.addData("pose", "%.1f, %.1f @ %.0f", poseX, poseY, poseHeading);',
+    '            telemetry.addData("error", "%.2f in, %.1f deg", posError, headError);',
+    "            telemetry.update();",
+    "        }",
+    "",
+    "        stopDrive();",
+    "        return false;",
+    "    }",
+    "",
+    "    private boolean turnTo(double targetHeadingDeg) {",
+    "        return driveTo(poseX, poseY, targetHeadingDeg);",
+    "    }",
+    "",
+    "    /**",
+    "     * A flat per-move timeout cannot work — a 6-inch hop and a 96-inch run",
+    "     * need very different budgets. This uses the same trapezoidal estimate",
+    "     * PathPilot shows, times a slack factor.",
+    "     */",
+    "    private double legTimeout(double distanceIn, double turnDeg) {",
+    "        double drive = trapezoidSeconds(distanceIn, MAX_VELOCITY, MAX_ACCEL);",
+    "        double turn = Math.abs(turnDeg) / TURN_RATE;",
+    "        return Math.min(TIMEOUT_BASE + TIMEOUT_FACTOR * Math.max(drive, turn), TIMEOUT_CEILING);",
+    "    }",
+    "",
+    "    private static double trapezoidSeconds(double distance, double vMax, double aMax) {",
+    "        if (distance <= 0 || vMax <= 0 || aMax <= 0) return 0;",
+    "        double ramp = (vMax * vMax) / aMax;",
+    "        if (distance < ramp) return 2 * Math.sqrt(distance / aMax);",
+    "        return distance / vMax + vMax / aMax;",
+    "    }",
+    "",
+    "    /** forward/left/turn in [-1,1], robot frame; turn positive clockwise. */",
+    "    private void setMecanum(double forward, double left, double turn) {",
+    "        double strafe = -left;",
+    "        double a = forward + strafe + turn;",
+    "        double b = forward - strafe - turn;",
+    "        double c = forward - strafe + turn;",
+    "        double d = forward + strafe - turn;",
+    "        double max = Math.max(Math.max(Math.abs(a), Math.abs(b)), Math.max(Math.abs(c), Math.abs(d)));",
+    "        if (max > 1.0) { a /= max; b /= max; c /= max; d /= max; }",
+    "        frontLeft.setPower(a);",
+    "        frontRight.setPower(b);",
+    "        backLeft.setPower(c);",
+    "        backRight.setPower(d);",
+    "    }",
+    "",
+    "    private void stopDrive() {",
+    "        frontLeft.setPower(0);",
+    "        frontRight.setPower(0);",
+    "        backLeft.setPower(0);",
+    "        backRight.setPower(0);",
+    "    }",
+    "",
+    "    private static double clamp(double v, double lo, double hi) {",
+    "        return v < lo ? lo : (v > hi ? hi : v);",
+    "    }",
+    "");
+
+  /* ---------------- vision ---------------- */
+  if (needLimelight) {
+    P("    // ================= vision =================",
+      "    /** Camera-space position of a tag, or null when not visible. */",
+      "    private Position seeTag(int tagId) {",
+      "        if (limelight == null) return null;",
+      "        LLResult result = limelight.getLatestResult();",
+      "        if (result == null || !result.isValid()) return null;",
+      "        List<LLResultTypes.FiducialResult> detections = result.getFiducialResults();",
+      "        if (detections == null) return null;",
+      "        for (LLResultTypes.FiducialResult d : detections) {",
+      "            if (d.getFiducialId() == tagId) {",
+      "                Pose3D pose = d.getTargetPoseCameraSpace();",
+      "                return pose == null ? null : pose.getPosition();",
+      "            }",
+      "        }",
+      "        return null;",
+      "    }",
+      "",
+      "    private boolean faceAprilTag(int tagId) {",
+      "        legTimer.reset();",
+      "        while (opModeIsActive() && legTimer.seconds() < 3.0) {",
+      "            updatePose();",
+      "            Position p = seeTag(tagId);",
+      "            if (p == null) { stopDrive(); continue; }",
+      "            double angleErr = Math.toDegrees(Math.atan2(p.x * 39.37, p.z * 39.37));",
+      "            if (Math.abs(angleErr) <= HEADING_TOLERANCE) { stopDrive(); return true; }",
+      "            double turn = clamp(HEAD_KP * angleErr, -MAX_POWER, MAX_POWER);",
+      "            if (Math.abs(turn) < MIN_POWER) turn = Math.copySign(MIN_POWER, turn);",
+      "            setMecanum(0, 0, turn);",
+      "        }",
+      "        stopDrive();",
+      "        return false;",
+      "    }",
+      "",
+      "    private boolean driveToAprilTag(int tagId, double targetDistanceIn) {",
+      "        legTimer.reset();",
+      "        while (opModeIsActive() && legTimer.seconds() < 3.0) {",
+      "            updatePose();",
+      "            Position p = seeTag(tagId);",
+      "            if (p == null) { stopDrive(); continue; }",
+      "            double xIn = p.x * 39.37, zIn = p.z * 39.37;",
+      "            double rangeErr = zIn - targetDistanceIn;",
+      "            double angleErr = Math.toDegrees(Math.atan2(xIn, zIn));",
+      "            if (Math.abs(rangeErr) <= POS_TOLERANCE && Math.abs(angleErr) <= HEADING_TOLERANCE) {",
+      "                stopDrive();",
+      "                return true;",
+      "            }",
+      "            double forward = clamp(TRANS_KP * rangeErr, -MAX_POWER, MAX_POWER);",
+      "            if (Math.abs(rangeErr) > POS_TOLERANCE && Math.abs(forward) < MIN_POWER) {",
+      "                forward = Math.copySign(MIN_POWER, forward);",
+      "            }",
+      "            setMecanum(forward, 0, clamp(HEAD_KP * angleErr, -MAX_POWER, MAX_POWER));",
+      "        }",
+      "        stopDrive();",
+      "        return false;",
+      "    }",
+      "",
+      "    /** Reads the obelisk MOTIF tag. Returns -1 when none is visible. */",
+      "    private int readObeliskMotif() {",
+      "        for (int id = 21; id <= 23; id++) {",
+      "            if (seeTag(id) != null) return id;",
+      "        }",
+      "        return -1;",
+      "    }",
+      "");
+  }
+
+  /* ---------------- macros ---------------- */
+  if (macros.length) {
+    P("    // ================= mechanism macros =================",
+      "    // Generated by BotBuilder from macros flagged \"Available in PathPilot\".",
+      "    // Edit them in BotBuilder and regenerate — changes here will be lost.",
+      "");
+    macros.forEach(m => {
+      const empty = !m.java.body || m.java.body.length === 0;
+      P(`    /** ${m.name} — ${m.stepCount} step(s), ~${m.java.estSeconds}s */`,
+        `    private void ${m.method}() {`);
+      if (empty) {
+        // An empty macro is legal, but silence at the robot is the worst way to
+        // learn about it. Say so on the Driver Station instead.
+        P(`        // "${m.name}" has no steps in BotBuilder, so there is nothing to run.`,
+          `        telemetry.addLine("${m.method}(): macro is empty - nothing happened");`,
+          "        telemetry.update();");
+      } else {
+        m.java.body.forEach(line => P(line ? `        ${line}` : ""));
+      }
+      P("    }", "");
+    });
+  } else if (usedMethods.size) {
+    P("    // ================= mechanism macros =================",
+      "    // This path calls macros that are not in the loaded robot profile:",
+      `    //   ${Array.from(usedMethods).join(", ")}`,
+      "    // Load the profile from BotBuilder and regenerate, or the build will fail.",
+      "");
+  }
+
+  P("}");
+  return L.join("\n");
+}
+
+/* -------------------------------------------------------------- component */
+
+const MARGIN = 42;
+let idCounter = 1000;
+const nextId = () => ++idCounter;
+
+const IN = { width: "100%", fontSize: "12px", background: "#18181b", border: "1px solid #3f3f46", borderRadius: "4px", padding: "5px 8px", color: "#fafafa" };
+const LB = { fontSize: "11px", color: "#a1a1aa", display: "block", marginBottom: "3px" };
+const CARD = { background: "#27272a", borderRadius: "8px", padding: "12px", border: "1px solid #3f3f46" };
+const BTN = { background: "transparent", border: "1px solid #52525b", color: "#fafafa", padding: "5px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "12px" };
+
+function NumField({ label, value, onChange, step = 1, min, max, suffix }) {
+  return (
+    <div>
+      <label style={LB}>{label}</label>
+      <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+        <input type="number" value={value} step={step} min={min} max={max} style={IN}
+               onChange={(e) => onChange(Number(e.target.value))} />
+        {suffix && <span style={{ fontSize: "10px", color: "#71717a", minWidth: "30px" }}>{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function PathPilot() {
+  const [packs, setPacks] = useState(() => BUILTIN_PACKS.map(p => compileSeason(p)));
+  const [seasonId, setSeasonId] = useState(BUILTIN_PACKS[0].id);
+  const [pendingSeason, setPendingSeason] = useState(null);
+  const season = packs.find(p => p.id === seasonId) || packs[0];
+
+  const FIELD = season.field.size;
+  const TILE = season.field.tile;
+  const SCALE = 490 / FIELD;
+  const VIEW = FIELD * SCALE + MARGIN * 2;
+
+  const [alliance, setAlliance] = useState("blue");
+  const [robotSize, setRobotSize] = useState(18);
+  const [motion, setMotion] = useState(DEFAULT_MOTION);
+  const [startPose, setStartPose] = useState(() => {
+    const p = compileSeason(BUILTIN_PACKS[0]).getPresets("blue", 18)[0];
+    return { x: p.x, y: p.y, heading: p.heading };
+  });
+  const [startPreset, setStartPreset] = useState(() => compileSeason(BUILTIN_PACKS[0]).getPresets("blue", 18)[0].id);
+  const [waypoints, setWaypoints] = useState([]);
+  const [selection, setSelection] = useState({ type: "start" });
+  const [drag, setDrag] = useState(null);
+  const [insertAfter, setInsertAfter] = useState(null);
+  const [showGrid, setShowGrid] = useState(true);
+  const [showZones, setShowZones] = useState(true);
+  const [showArtifacts, setShowArtifacts] = useState(true);
+  const [dimOpponent, setDimOpponent] = useState(true);
+  const [tab, setTab] = useState("path");
+  const [notice, setNotice] = useState(null);
+  // Transient confirmations shouldn't linger; problems should.
+  useEffect(() => {
+    if (!notice || notice.bad) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
+  const [pathName, setPathName] = useState("Auto");
+  const [profile, setProfile] = useState(null);
+  const macros = profile && profile.macros ? profile.macros : [];
+  // A season contributes tag actions; a robot without a camera cannot run them.
+  const profileHasLimelight = !profile || !profile.limelight || profile.limelight.present !== false;
+  const visibleActions = profileHasLimelight
+    ? season.actions
+    : season.actions.filter(a => !["faceTag", "driveToTag", "readMotif"].includes(a.id));
+  const svgRef = useRef(null);
+
+  const opponent = alliance === "blue" ? "red" : "blue";
+  const A = season.alliances[alliance];
+  const clamp = useCallback((v) => Math.max(0, Math.min(FIELD, Math.round(v * 10) / 10)), [FIELD]);
+
+  const toSvg = useCallback((x, y) => ({ x: MARGIN + x * SCALE, y: MARGIN + (FIELD - y) * SCALE }), [SCALE, FIELD]);
+  const toField = useCallback((sx, sy) => ({ x: (sx - MARGIN) / SCALE, y: FIELD - (sy - MARGIN) / SCALE }), [SCALE, FIELD]);
+  const polyStr = (pts) => pts.map(([x, y]) => { const p = toSvg(x, y); return `${p.x},${p.y}`; }).join(" ");
+
+  const presets = season.getPresets(alliance, robotSize);
+  const setM = (k, v) => setMotion(m => ({ ...m, [k]: v }));
+
+  /* ---- season switching ---- */
+  const requestSeason = (id) => {
+    if (id === seasonId) return;
+    if (waypoints.length > 0) { setPendingSeason(id); return; }
+    commitSeason(id);
+  };
+  const commitSeason = (id) => {
+    const s = packs.find(p => p.id === id);
+    const p = s.getPresets(alliance, robotSize)[0];
+    setSeasonId(id); setWaypoints([]); setStartPreset(p.id);
+    setStartPose({ x: p.x, y: p.y, heading: p.heading });
+    setSelection({ type: "start" }); setPendingSeason(null); setNotice(null);
+  };
+
+  useEffect(() => {
+    if (startPreset === "custom") return;
+    const p = season.getPresets(alliance, robotSize).find(pp => pp.id === startPreset);
+    if (p && p.x !== null) setStartPose(sp => ({ ...sp, x: p.x, y: p.y }));
+  }, [robotSize, alliance, startPreset, season]);
+
+  /* ---- pointer ---- */
+  const svgCoords = (e) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    const k = VIEW / rect.width;
+    return { x: (e.clientX - rect.left) * k, y: (e.clientY - rect.top) * k };
+  };
+  const handleFieldClick = (e) => {
+    if (drag && drag.moved) return;
+    const { x: sx, y: sy } = svgCoords(e);
+    const f = toField(sx, sy);
+    if (f.x < 0 || f.x > FIELD || f.y < 0 || f.y > FIELD) return;
+    const wp = { id: nextId(), x: clamp(f.x), y: clamp(f.y), heading: 0, action: "none", actionParams: {} };
+    if (insertAfter !== null) {
+      setWaypoints(wps => { const c = [...wps]; c.splice(insertAfter + 1, 0, wp); return c; });
+      setInsertAfter(null);
+    } else setWaypoints(wps => [...wps, wp]);
+    setSelection({ type: "wp", id: wp.id });
+  };
+  const handlePointMouseDown = (e, target, px, py) => {
+    e.stopPropagation(); setSelection(target);
+    const { x: sx, y: sy } = svgCoords(e);
+    const pos = toSvg(px, py);
+    setDrag({ target, offsetX: sx - pos.x, offsetY: sy - pos.y, moved: false });
+  };
+  const handleMouseMove = useCallback((e) => {
+    if (!drag) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const k = VIEW / rect.width;
+    const f = toField((e.clientX - rect.left) * k - drag.offsetX, (e.clientY - rect.top) * k - drag.offsetY);
+    if (!drag.moved) setDrag(d => ({ ...d, moved: true }));
+    if (drag.target.type === "start") {
+      setStartPose(sp => ({ ...sp, x: clamp(f.x), y: clamp(f.y) }));
+      setStartPreset("custom");
+    } else {
+      setWaypoints(wps => wps.map(wp => wp.id === drag.target.id ? { ...wp, x: clamp(f.x), y: clamp(f.y) } : wp));
+    }
+  }, [drag, toField, clamp, VIEW]);
+  const handleMouseUp = useCallback(() => { setTimeout(() => setDrag(null), 0); }, []);
+  useEffect(() => {
+    if (!drag) return;
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
+  }, [drag, handleMouseMove, handleMouseUp]);
+
+  /* ---- edits ---- */
+  const deleteWaypoint = (id) => {
+    setWaypoints(wps => wps.filter(wp => wp.id !== id));
+    if (selection.type === "wp" && selection.id === id) setSelection({ type: "start" });
+  };
+  const duplicateWaypoint = (i) => setWaypoints(wps => {
+    const src = wps[i]; const out = [...wps];
+    out.splice(i + 1, 0, { ...src, id: nextId(), x: clamp(src.x + 6), y: clamp(src.y + 6) });
+    return out;
+  });
+  const updateWaypoint = (id, key, value) => setWaypoints(wps => wps.map(wp => wp.id === id ? { ...wp, [key]: value } : wp));
+  const updateStart = (key, value) => { setStartPose(sp => ({ ...sp, [key]: value })); setStartPreset("custom"); };
+  const applyPreset = (id) => {
+    setStartPreset(id);
+    const p = presets.find(pp => pp.id === id);
+    if (p && p.x !== null) setStartPose({ x: p.x, y: p.y, heading: p.heading });
+  };
+  const moveWaypoint = (i, d) => {
+    const ni = i + d; if (ni < 0 || ni >= waypoints.length) return;
+    const arr = [...waypoints]; [arr[i], arr[ni]] = [arr[ni], arr[i]]; setWaypoints(arr);
+  };
+  const clearWaypoints = () => { setWaypoints([]); setSelection({ type: "start" }); setInsertAfter(null); };
+  const switchAlliance = () => {
+    const next = opponent; setAlliance(next);
+    if (startPreset !== "custom") {
+      const p = season.getPresets(next, robotSize).find(pp => pp.id === startPreset);
+      if (p && p.x !== null) setStartPose({ x: p.x, y: p.y, heading: p.heading });
+    }
+  };
+  const mirrorPath = () => {
+    const M = season.mirror;
+    setStartPose(sp => { const m = M.point(sp.x, sp.y); return { x: clamp(m.x), y: clamp(m.y), heading: M.heading(sp.heading) }; });
+    setWaypoints(wps => wps.map(wp => {
+      const m = M.point(wp.x, wp.y);
+      return { ...wp, x: clamp(m.x), y: clamp(m.y), heading: M.heading(wp.heading),
+        actionParams: wp.actionParams.tagId ? { ...wp.actionParams, tagId: M.tag(wp.actionParams.tagId) } : wp.actionParams };
+    }));
+    setAlliance(opponent); setStartPreset("custom");
+  };
+
+  /* ---- validation ---- */
+  const startIssues = season.validateStart(startPose, { alliance, robotSize });
+  const startLegal = startIssues.length === 0;
+
+  const wpBlocked = {};
+  waypoints.forEach(wp => {
+    for (const o of season.obstacles)
+      if (circleHitsPoly(wp.x, wp.y, robotSize / 2 - 1, o.poly)) { wpBlocked[wp.id] = o.name; break; }
+  });
+
+  // Swept-path check: a leg can pass through a structure with both ends clear.
+  const legBlocked = {};
+  {
+    const chain = [startPose, ...waypoints];
+    for (let i = 1; i < chain.length; i++) {
+      const a = chain[i - 1], b = chain[i];
+      for (const o of season.obstacles) {
+        if (sweepHitsPoly(a.x, a.y, b.x, b.y, robotSize / 2 - 1, o.poly)) { legBlocked[chain[i].id] = o.name; break; }
+      }
+    }
+  }
+  const blockedCount = Object.keys(wpBlocked).length;
+  const legBlockedCount = Object.keys(legBlocked).filter(k => !wpBlocked[k]).length;
+
+  /* ---- timing ---- */
+  const timing = estimatePath(startPose, waypoints, motion, season);
+  const budget = season.autoSeconds;
+  const overBudget = budget && timing.total > budget;
+
+  /* ---- files ----
+   * Sandboxed previews block file pickers and downloads, so every transfer
+   * offers copy/paste as well. Same data either way. */
+  const [transfer, setTransfer] = useState(null);
+
+  const openExport = (title, filename, obj) =>
+    setTransfer({ mode: "export", title, filename, text: JSON.stringify(obj, null, 2) });
+  const openImport = (title, onLoad) =>
+    setTransfer({ mode: "import", title, text: "", onLoad });
+
+  const download = (obj, name) => {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const pathPayload = () => ({
+    app: "PathPilot", formatVersion: 2, seasonId: season.id, seasonName: `${season.name} ${season.years}`,
+    alliance, robotSize, motion, startPose, startPreset,
+    waypoints: waypoints.map(({ id, ...r }) => r), exportedAt: new Date().toISOString(),
+  });
+  const exportPath = () => openExport("Save path", `pathpilot-${season.id}-${alliance}.json`, pathPayload());
+
+  const exportPack = () => openExport("Season pack", `season-${season.id}.json`, season.dsl);
+
+  const loadPathText = (text) => {
+      try {
+        const d = JSON.parse(text);
+        if (d.app !== "PathPilot") return setNotice({ bad: true, msg: "Not a PathPilot path file." });
+        if (!packs.some(p => p.id === d.seasonId)) return setNotice({ bad: true, msg: `No season "${d.seasonId}" loaded. Import that season pack first.` });
+        if (d.seasonId !== seasonId) return setNotice({ bad: true, msg: `That path is for ${d.seasonName}. Switch to that season before loading it.` });
+        setAlliance(d.alliance || "blue"); setRobotSize(d.robotSize || 18);
+        if (d.motion) setMotion({ ...DEFAULT_MOTION, ...d.motion });
+        setStartPreset(d.startPreset || "custom"); setStartPose(d.startPose);
+        setWaypoints((d.waypoints || []).map(w => ({ ...w, id: nextId() })));
+        setSelection({ type: "start" });
+        setNotice({ bad: false, msg: `Loaded ${(d.waypoints || []).length} waypoints.` });
+      } catch { setNotice({ bad: true, msg: "That is not valid JSON." }); }
+  };
+
+  const loadProfileText = (text) => {
+      try {
+        const p = JSON.parse(text);
+        if (p.pathpilotProfile !== 1) {
+          setNotice({ bad: true, msg: `Profile declares format ${p.pathpilotProfile}, this build reads 1.` });
+          return;
+        }
+        setProfile(p);
+        if (p.chassis && p.chassis.widthIn && p.chassis.lengthIn) {
+          setRobotSize(Math.round(Math.max(p.chassis.widthIn, p.chassis.lengthIn)));
+        }
+        const n = (p.macros || []).length;
+        const noJava = (p.macros || []).some(m => !m.java);
+        const problems = [];
+        if (p.odometry) {
+          ["parallel", "perpendicular"].forEach(k => {
+            const pod = p.odometry[k];
+            if (pod && !pod.hardwareName) problems.push(`the ${k} pod has no motor on its port`);
+            if (pod && !pod.ticksPerInch) problems.push(`the ${k} pod has no ticks/inch`);
+          });
+        }
+        if (noJava) problems.push("macros carry no generated Java — re-export the profile from an up-to-date BotBuilder");
+        const uncal = !p.odometry || !p.odometry.calibration || p.odometry.calibration.status !== "calibrated";
+        setNotice({
+          bad: problems.length > 0 || uncal,
+          msg: `Loaded "${p.name}" — ${n} macro${n === 1 ? "" : "s"}.` +
+               (problems.length ? ` Problems: ${problems.join("; ")}.` : "") +
+               (uncal ? " Odometry is not calibrated, so path accuracy is unverified." : "")
+        });
+      } catch { setNotice({ bad: true, msg: "That is not valid JSON." }); }
+  };
+
+  const loadPackText = (text) => {
+      let compiled;
+      try {
+        const dsl = JSON.parse(text);
+        compiled = compileSeason(dsl);
+      } catch (err) {
+        return setNotice({ bad: true, msg: `Season pack rejected: ${err.message}` });
+      }
+      // Same verification the built-ins get: every preset legal at every size.
+      const bad = [];
+      for (let size = 12; size <= 18; size += 2)
+        for (const al of ["blue", "red"])
+          for (const p of compiled.getPresets(al, size)) {
+            if (p.x === null) continue;
+            const iss = compiled.validateStart({ x: p.x, y: p.y, heading: p.heading }, { alliance: al, robotSize: size });
+            if (iss.length) bad.push(`${size}" ${al} "${p.id}": ${iss[0]}`);
+          }
+      compiled.imported = true;
+      setPacks(ps => [...ps.filter(p => p.id !== compiled.id), compiled]);
+      setNotice(bad.length
+        ? { bad: true, msg: `Loaded "${compiled.name}", but ${bad.length} preset check(s) failed — e.g. ${bad[0]}. The pack is usable; its presets may not be legal.` }
+        : { bad: false, msg: `Loaded season pack "${compiled.name}" — all preset checks passed.` });
+      if (waypoints.length === 0) commitSeason(compiled.id); else setPendingSeason(compiled.id);
+  };
+
+  /* ---- codegen ---- */
+  const opModeClassName = javaClassName(
+    `${season.name} ${alliance} ${pathName || "Auto"}`.replace(/\s+/g, " ").trim());
+
+  const generateCode = () => generateOpMode({
+    className: opModeClassName,
+    season, alliance, startPose, waypoints, motion, profile, timing,
+  });
+
+  /* ---- render helpers ---- */
+  const op = (who) => (dimOpponent && who === opponent ? 0.28 : 1);
+  const colorOf = (who) => (who ? season.alliances[who].color : "#9CA3AF");
+  const G = season.geometry;
+
+  const renderTiles = () => {
+    const out = []; const n = Math.round(FIELD / TILE);
+    for (let i = 1; i < n; i++) {
+      const t = MARGIN + i * TILE * SCALE;
+      out.push(<line key={`v${i}`} x1={t} y1={MARGIN} x2={t} y2={MARGIN + FIELD * SCALE} stroke="#3f3f46" strokeWidth="0.7" style={{ pointerEvents: "none" }} />,
+               <line key={`h${i}`} x1={MARGIN} y1={t} x2={MARGIN + FIELD * SCALE} y2={t} stroke="#3f3f46" strokeWidth="0.7" style={{ pointerEvents: "none" }} />);
+    }
+    for (let i = 0; i < n; i++) {
+      const cx = MARGIN + (i * TILE + TILE / 2) * SCALE;
+      const ry = MARGIN + (FIELD - (i * TILE + TILE / 2)) * SCALE;
+      out.push(<text key={`cl${i}`} x={cx} y={MARGIN + FIELD * SCALE + 16} textAnchor="middle" fill="#71717a" fontSize="11" fontWeight="600" style={{ pointerEvents: "none" }}>{season.columns[i]}</text>,
+               <text key={`rn${i}`} x={MARGIN - 12} y={ry} textAnchor="middle" dominantBaseline="middle" fill="#71717a" fontSize="11" fontWeight="600" style={{ pointerEvents: "none" }}>{i + 1}</text>);
+    }
+    return out;
+  };
+
+  const renderPolys = () => (G.polygons || []).map(pg => {
+    const isL = pg.kind === "launch";
+    const c = isL ? "#E5E7EB" : colorOf(pg.owner);
+    const lp = pg.labelAt ? toSvg(pg.labelAt[0], pg.labelAt[1]) : null;
+    return (
+      <g key={pg.key} opacity={pg.owner ? op(pg.owner) : 1} style={{ pointerEvents: "none" }}>
+        <polygon points={polyStr(pg.points)} fill={isL ? "#D9E021" : c} fillOpacity={isL ? 0.11 : 0.35} stroke={c} strokeWidth="2" />
+        {lp && <text x={lp.x} y={lp.y} textAnchor="middle" dominantBaseline="middle" fill={isL ? "#A3A34D" : "#fff"} fontSize={isL ? 9 : 8.5} fontWeight="700">{pg.label}</text>}
+      </g>
+    );
+  });
+
+  const renderRects = () => (G.rects || []).map(z => {
+    const p = toSvg(z.x, z.y + z.height); const c = colorOf(z.owner);
+    return (
+      <g key={z.key} opacity={op(z.owner)} style={{ pointerEvents: "none" }}>
+        <rect x={p.x} y={p.y} width={z.width * SCALE} height={z.height * SCALE} fill={c} fillOpacity="0.16" stroke={c} strokeWidth="1.4" strokeDasharray={z.dashed ? "5,3" : "none"} />
+        {z.label && <text x={p.x + z.width * SCALE / 2} y={p.y + z.height * SCALE / 2} textAnchor="middle" dominantBaseline="middle" fill={c} fontSize="8.5" fontWeight="600">{z.label}</text>}
+      </g>
+    );
+  });
+
+  const renderTape = () => (G.tapeLines || []).map(t => {
+    const a = toSvg(t.from[0], t.from[1]), b = toSvg(t.to[0], t.to[1]);
+    return <line key={t.key} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#E5E7EB" strokeWidth="2.5" opacity={op(t.owner)} style={{ pointerEvents: "none" }} />;
+  });
+
+  const renderMarkers = () => (G.markers || []).map((mk, i) => {
+    const p = toSvg(mk.x, mk.y);
+    return (
+      <g key={`mk${i}`} style={{ pointerEvents: "none" }}>
+        <line x1={p.x} y1={p.y} x2={p.x + mk.len * SCALE} y2={p.y} stroke="#E5E7EB" strokeWidth="2" />
+        {showArtifacts && String(mk.motif).split("").map((ch, bi) => (
+          <circle key={bi} cx={p.x + (2.5 + bi * 3.4) * SCALE} cy={p.y - 5} r="4.5" fill={(G.markerColors || {})[ch] || "#9CA3AF"} stroke="#18181b" strokeWidth="0.6" />
+        ))}
+      </g>
+    );
+  });
+
+  const renderTags = () => {
+    const out = season.tags.map(t => {
+      const p = toSvg(t.x, t.y); const c = colorOf(t.owner);
+      return (
+        <g key={`tag${t.id}`} opacity={op(t.owner)} style={{ pointerEvents: "none" }}>
+          <rect x={p.x - 11} y={p.y - 11} width={22} height={22} rx="3" fill="#fafafa" stroke={c} strokeWidth="2.5" />
+          <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="#18181b" fontSize="10" fontWeight="700">{t.id}</text>
+        </g>
+      );
+    });
+    season.offFieldTags.forEach((o, i) => {
+      const p = toSvg(o.x, o.y);
+      out.push(
+        <g key={`off${i}`} style={{ pointerEvents: "none" }}>
+          <rect x={p.x - 18} y={p.y - 30} width={36} height={22} rx="3" fill="#27272a" stroke="#a1a1aa" strokeWidth="1.5" />
+          <text x={p.x} y={p.y - 19} textAnchor="middle" dominantBaseline="middle" fill="#d4d4d8" fontSize="8" fontWeight="600">{o.ids}</text>
+          <text x={p.x} y={p.y - 36} textAnchor="middle" fill="#71717a" fontSize="8">{o.label}</text>
+        </g>
+      );
+    });
+    return out;
+  };
+
+  const renderAreas = () => ["red", "blue"].map(who => {
+    const a = season.alliances[who]; const left = a.areaSide === "left";
+    const x = left ? 4 : MARGIN + FIELD * SCALE + 6;
+    const cx = x + (MARGIN - 10) / 2; const cy = MARGIN + 72 * SCALE;
+    return (
+      <g key={`aa${who}`} style={{ pointerEvents: "none" }}>
+        <rect x={x} y={MARGIN + 40 * SCALE} width={MARGIN - 10} height={64 * SCALE} fill={a.color} fillOpacity={dimOpponent && who === opponent ? 0.08 : 0.22} rx="4" />
+        <text x={cx} y={cy} textAnchor="middle" fill={a.color} fontSize="9" fontWeight="600" transform={`rotate(${left ? -90 : 90}, ${cx}, ${cy})`}>{a.label.toUpperCase()} AREA</text>
+      </g>
+    );
+  });
+
+  const headingLine = (pos, h, color, len) => (
+    <line x1={pos.x} y1={pos.y} x2={pos.x + Math.cos((90 - h) * Math.PI / 180) * len} y2={pos.y - Math.sin((90 - h) * Math.PI / 180) * len} stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+  );
+
+  const renderPath = () => {
+    const out = []; const chain = [startPose, ...waypoints];
+    for (let i = 0; i < chain.length - 1; i++) {
+      const p1 = toSvg(chain[i].x, chain[i].y), p2 = toSvg(chain[i + 1].x, chain[i + 1].y);
+      const badLeg = legBlocked[chain[i + 1].id];
+      out.push(<line key={`ln${i}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                     stroke={badLeg ? "#EF4444" : (i === 0 ? "#F59E0B" : "#10B981")}
+                     strokeWidth={badLeg ? 3 : 2.2} strokeDasharray="6,4" style={{ pointerEvents: "none" }} />);
+    }
+    const sp = toSvg(startPose.x, startPose.y); const sSel = selection.type === "start";
+    out.push(
+      <g key="start" style={{ cursor: "grab" }} onMouseDown={(e) => handlePointMouseDown(e, { type: "start" }, startPose.x, startPose.y)} onClick={(e) => e.stopPropagation()}>
+        <circle cx={sp.x} cy={sp.y} r={robotSize / 2 * SCALE} fill={startLegal ? "rgba(245,158,11,0.10)" : "rgba(239,68,68,0.18)"} stroke={startLegal ? (sSel ? "#F59E0B" : "#92400E") : "#EF4444"} strokeWidth="1.6" strokeDasharray="4,4" />
+        {headingLine(sp, startPose.heading, "#F59E0B", 24)}
+        <rect x={sp.x - 14} y={sp.y - 14} width={28} height={28} rx="6" fill={sSel ? "#F59E0B" : "#B45309"} stroke={sSel ? "#FCD34D" : "#78350F"} strokeWidth="2.5" />
+        <text x={sp.x} y={sp.y} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="13" fontWeight="bold" style={{ pointerEvents: "none" }}>S</text>
+      </g>
+    );
+    waypoints.forEach((wp, i) => {
+      const p = toSvg(wp.x, wp.y);
+      const sel = selection.type === "wp" && selection.id === wp.id;
+      const bad = !!wpBlocked[wp.id]; const legBad = !!legBlocked[wp.id];
+      const act = season.actions.find(a => a.id === wp.action);
+      out.push(
+        <g key={wp.id} style={{ cursor: "grab" }} onMouseDown={(e) => handlePointMouseDown(e, { type: "wp", id: wp.id }, wp.x, wp.y)} onClick={(e) => e.stopPropagation()}>
+          <circle cx={p.x} cy={p.y} r={robotSize / 2 * SCALE} fill={bad ? "rgba(239,68,68,0.18)" : (sel ? "rgba(16,185,129,0.10)" : "transparent")} stroke={bad ? "#EF4444" : (sel ? "#10B981" : "#6B7280")} strokeWidth={bad ? 1.6 : 1} strokeDasharray="4,4" opacity="0.7" />
+          {headingLine(p, wp.heading, sel ? "#10B981" : "#9CA3AF", 20)}
+          <circle cx={p.x} cy={p.y} r={sel ? 13 : 11} fill={bad ? "#B91C1C" : (legBad ? "#7C2D12" : (sel ? "#10B981" : "#374151"))} stroke={sel ? "#065F46" : "#6B7280"} strokeWidth="2.5" />
+          <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="11" fontWeight="bold" style={{ pointerEvents: "none" }}>{i + 1}</text>
+          {wp.action !== "none" && <text x={p.x + 15} y={p.y - 11} fontSize="12" style={{ pointerEvents: "none" }}>{act && act.icon}</text>}
+        </g>
+      );
+    });
+    return out;
+  };
+
+  const selectedWp = selection.type === "wp" ? waypoints.find(w => w.id === selection.id) : null;
+  const selIdx = selectedWp ? waypoints.findIndex(w => w.id === selectedWp.id) : -1;
+
+  const renderActionParams = (wp) => {
+    const def = season.actions.find(a => a.id === wp.action);
+    if (!def || !def.params) return null;
+    const set = (k, v) => updateWaypoint(wp.id, "actionParams", { ...wp.actionParams, [k]: v });
+    return def.params.map(p => {
+      const cur = wp.actionParams[p.key] !== undefined ? wp.actionParams[p.key]
+        : (p.default === "@myTag" ? A.tag : p.default);
+      if (p.type === "tagId") return (
+        <div key={p.key} style={{ marginBottom: "10px" }}>
+          <label style={LB}>{p.label}</label>
+          <select style={IN} value={cur || ""} onChange={(e) => set(p.key, Number(e.target.value))}>
+            {season.tags.map(t => <option key={t.id} value={t.id}>{t.id} — {season.alliances[t.owner].label} goal</option>)}
+            {season.tags.length === 0 && <option value="">no tags this season</option>}
+          </select>
+        </div>
+      );
+      if (p.type === "macro") {
+        const chosen = macros.find(m => m.method === cur);
+        const isEmpty = chosen && (chosen.stepCount === 0 || (chosen.java && chosen.java.body && chosen.java.body.length === 0));
+        return (
+        <div key={p.key} style={{ marginBottom: "10px" }}>
+          <label style={LB}>{p.label}</label>
+          <select style={IN} value={cur || ""} onChange={(e) => set(p.key, e.target.value)}>
+            <option value="">{macros.length ? "Select macro..." : "No profile loaded"}</option>
+            {macros.map(m => (
+              <option key={m.method} value={m.method}>
+                {m.name}{(m.stepCount === 0 || (m.java && m.java.body && m.java.body.length === 0)) ? "  (empty — does nothing)" : ""}
+              </option>
+            ))}
+          </select>
+          {isEmpty && (
+            <div style={{ fontSize: "11px", color: "#FBBF24", marginTop: "4px", lineHeight: 1.5 }}>
+              ⚠ "{chosen.name}" has no steps in BotBuilder, so this waypoint will arrive and do nothing.
+            </div>
+          )}
+        </div>
+      );
+      }
+      return (
+        <div key={p.key} style={{ marginBottom: "10px" }}>
+          <label style={LB}>{p.label}</label>
+          <input type="number" style={IN} value={cur} step={p.step || 1} min={p.min} onChange={(e) => set(p.key, Number(e.target.value))} />
+        </div>
+      );
+    });
+  };
+
+  const TABS = [
+    { id: "path", label: "🗺️ Path" }, { id: "waypoints", label: "📋 Waypoints" },
+    { id: "motion", label: "🎚️ Motion" }, { id: "code", label: "💻 Code" }, { id: "field", label: "📐 Field data" },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#18181b", color: "#fafafa", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", padding: "1.5rem" }}>
+      <div style={{ maxWidth: "1020px", margin: "0 auto" }}>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "11px" }}>
+            <img src={LOGO} alt="" width="40" height="40" style={{ display: "block", flexShrink: 0 }} />
+            <div style={{ lineHeight: 1 }}>
+              <div style={{ fontSize: "22px", fontWeight: 700, letterSpacing: "-0.3px" }}>
+                <span style={{ color: "#E5E7EB" }}>Path</span><span style={{ color: "#3B82F6" }}>Pilot</span>
+              </div>
+              <div style={{ fontSize: "8.5px", color: "#52525b", letterSpacing: "2.2px", fontWeight: 600, marginTop: "3px" }}>DESIGN · DEPLOY · DRIVE</div>
+            </div>
+            <select value={seasonId} onChange={(e) => requestSeason(e.target.value)} style={{ ...IN, width: "auto", fontSize: "12px", padding: "5px 10px", marginLeft: "6px" }}>
+              {packs.map(s => <option key={s.id} value={s.id}>{s.name}{s.years ? ` ${s.years}` : ""}</option>)}
+            </select>
+            {season.verified && <span title={season.source} style={{ fontSize: "11px", color: "#6EE7B7", background: "rgba(16,185,129,0.12)", border: "1px solid #065F46", borderRadius: "5px", padding: "2px 7px" }}>🔒 verified</span>}
+            {season.imported && <span style={{ fontSize: "11px", color: "#FBBF24", background: "rgba(245,158,11,0.12)", border: "1px solid #B45309", borderRadius: "5px", padding: "2px 7px" }}>imported</span>}
+          </div>
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            <button onClick={switchAlliance} style={{ background: A.color, color: "white", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "13px" }}>
+              {alliance === "blue" ? "🔵" : "🔴"} {A.label}
+            </button>
+            <button onClick={mirrorPath} style={BTN} title="Flip the path to the other alliance">⇄ Mirror</button>
+            <button onClick={exportPath} style={BTN} title="Save this path as JSON">💾 Save path</button>
+            <button onClick={() => openImport("Open path", loadPathText)} style={BTN} title="Load a saved path">📂 Open path</button>
+            <button onClick={() => openImport("Load robot profile", loadProfileText)}
+                    title="Robot profile exported from BotBuilder"
+                    style={{ ...BTN, borderColor: profile ? "#065F46" : "#52525b", color: profile ? "#6EE7B7" : "#fafafa" }}>
+              {profile ? `🤖 ${profile.name}` : "🤖 Load profile"}
+            </button>
+            <button onClick={clearWaypoints} style={BTN} title="Clear all waypoints">🗑️</button>
+          </div>
+        </div>
+
+        {/* Transfer modal — file access is blocked in sandboxed previews, so
+            every save/open also works by copy and paste. */}
+        {transfer && (
+          <div onClick={() => setTransfer(null)}
+               style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex",
+                        alignItems: "center", justifyContent: "center", zIndex: 50, padding: "20px" }}>
+            <div onClick={(e) => e.stopPropagation()}
+                 style={{ background: "#27272a", border: "1px solid #3f3f46", borderRadius: "12px",
+                          padding: "18px", width: "min(720px, 100%)", maxHeight: "80vh",
+                          display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <strong style={{ fontSize: "15px" }}>{transfer.title}</strong>
+                <button onClick={() => setTransfer(null)} style={{ ...BTN, padding: "2px 9px" }}>×</button>
+              </div>
+
+              {transfer.mode === "export" ? (
+                <>
+                  <div style={{ fontSize: "12px", color: "#a1a1aa" }}>
+                    Download the file, or copy the text and keep it wherever you like.
+                  </div>
+                  <textarea readOnly value={transfer.text}
+                            onFocus={(e) => e.target.select()}
+                            style={{ ...IN, height: "300px", fontFamily: "ui-monospace, Menlo, monospace",
+                                     fontSize: "11px", resize: "vertical" }} />
+                  <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                    <button onClick={() => { navigator.clipboard.writeText(transfer.text);
+                                             setNotice({ bad: false, msg: "Copied to clipboard." }); }}
+                            style={BTN}>📋 Copy</button>
+                    <button onClick={() => {
+                      try {
+                        const blob = new Blob([transfer.text], { type: "application/json" });
+                        const a = document.createElement("a");
+                        a.href = URL.createObjectURL(blob);
+                        a.download = transfer.filename;
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                      } catch {
+                        setNotice({ bad: true, msg: "Download blocked here — use Copy instead." });
+                      }
+                    }} style={BTN}>⬇ Download</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: "12px", color: "#a1a1aa" }}>
+                    Paste the JSON below, or choose a file. Both do the same thing —
+                    paste works even where file access is blocked.
+                  </div>
+                  <textarea autoFocus value={transfer.text}
+                            onChange={(e) => setTransfer(t => ({ ...t, text: e.target.value }))}
+                            placeholder="Paste JSON here..."
+                            style={{ ...IN, height: "300px", fontFamily: "ui-monospace, Menlo, monospace",
+                                     fontSize: "11px", resize: "vertical" }} />
+                  <div style={{ display: "flex", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
+                    <label style={{ ...BTN, display: "inline-block" }}>
+                      📁 Choose file
+                      <input type="file" accept="application/json,.json" style={{ display: "none" }}
+                             onChange={(e) => {
+                               const f = e.target.files && e.target.files[0];
+                               if (!f) return;
+                               const rd = new FileReader();
+                               rd.onload = () => setTransfer(t => ({ ...t, text: String(rd.result) }));
+                               rd.readAsText(f);
+                               e.target.value = "";
+                             }} />
+                    </label>
+                    <span style={{ display: "flex", gap: "8px" }}>
+                      <button onClick={() => setTransfer(null)} style={BTN}>Cancel</button>
+                      <button disabled={!transfer.text.trim()}
+                              onClick={() => { const fn = transfer.onLoad; const txt = transfer.text;
+                                               setTransfer(null); fn(txt); }}
+                              style={{ ...BTN, borderColor: "#065F46", color: "#6EE7B7",
+                                       opacity: transfer.text.trim() ? 1 : 0.4 }}>Load</button>
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {pendingSeason && (
+          <div style={{ background: "rgba(245,158,11,0.13)", border: "1px solid #B45309", borderRadius: "8px", padding: "10px 12px", marginBottom: "12px", fontSize: "13px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+            <span>Switching to {(packs.find(p => p.id === pendingSeason) || {}).name} clears your {waypoints.length} waypoint{waypoints.length > 1 ? "s" : ""} — the fields differ, so they wouldn't be meaningful.</span>
+            <span style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+              <button onClick={() => commitSeason(pendingSeason)} style={{ ...BTN, borderColor: "#B45309", color: "#FBBF24" }}>Switch anyway</button>
+              <button onClick={() => setPendingSeason(null)} style={BTN}>Cancel</button>
+            </span>
+          </div>
+        )}
+
+        {notice && (
+          <div style={{ background: notice.bad ? "rgba(239,68,68,0.13)" : "rgba(16,185,129,0.12)", border: `1px solid ${notice.bad ? "#7f1d1d" : "#065F46"}`, borderRadius: "8px", padding: "9px 12px", marginBottom: "12px", fontSize: "13px", display: "flex", justifyContent: "space-between", gap: "12px", color: notice.bad ? "#fca5a5" : "#6EE7B7" }}>
+            <span>{notice.msg}</span>
+            <button onClick={() => setNotice(null)} style={{ ...BTN, padding: "1px 8px" }}>×</button>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: "4px", marginBottom: "1rem", borderBottom: "1px solid #3f3f46", paddingBottom: "8px", flexWrap: "wrap" }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ background: tab === t.id ? "#27272a" : "transparent", border: tab === t.id ? "1px solid #3f3f46" : "1px solid transparent", padding: "6px 14px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: tab === t.id ? 500 : 400, color: "#fafafa" }}>{t.label}</button>
+          ))}
+        </div>
+
+        {tab === "path" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 250px", gap: "16px" }}>
+            <div style={CARD}>
+              {insertAfter !== null && (
+                <div style={{ background: "rgba(16,185,129,0.15)", border: "1px solid #10B981", borderRadius: "6px", padding: "6px 10px", marginBottom: "8px", fontSize: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Click the field to insert after #{insertAfter + 1}</span>
+                  <button onClick={() => setInsertAfter(null)} style={{ ...BTN, padding: "2px 8px" }}>Cancel</button>
+                </div>
+              )}
+              <svg ref={svgRef} viewBox={`0 0 ${VIEW} ${VIEW}`} style={{ display: "block", cursor: "crosshair", width: "100%", height: "auto" }} onClick={handleFieldClick}>
+                <rect width={VIEW} height={VIEW} fill="#1a1a1e" />
+                {renderAreas()}
+                <rect x={MARGIN} y={MARGIN} width={FIELD * SCALE} height={FIELD * SCALE} fill="#242428" stroke="#52525b" strokeWidth="2" style={{ pointerEvents: "none" }} />
+                {showGrid && renderTiles()}
+                {showZones && renderPolys()}
+                {showZones && renderRects()}
+                {showZones && renderTape()}
+                {renderMarkers()}
+                {renderTags()}
+                {renderPath()}
+                <text x={MARGIN + FIELD * SCALE / 2} y={VIEW - 8} textAnchor="middle" fill="#71717a" fontSize="10" fontWeight="600" letterSpacing="1" style={{ pointerEvents: "none" }}>{season.audienceLabel}</text>
+              </svg>
+              <div style={{ fontSize: "11px", color: "#71717a", marginTop: "8px", textAlign: "center" }}>Click empty field to add • Click a point to edit • Drag to move</div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ ...CARD, border: selection.type === "start" ? "1px solid #F59E0B" : "1px solid #3f3f46" }}>
+                <div onClick={() => setSelection({ type: "start" })} style={{ fontSize: "12px", fontWeight: 500, marginBottom: "10px", color: "#FBBF24", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "18px", height: "18px", borderRadius: "4px", background: "#B45309", color: "white", fontSize: "10px", fontWeight: "bold" }}>S</span>
+                  Starting position
+                </div>
+                {!startLegal ? (
+                  <div style={{ background: "rgba(239,68,68,0.15)", border: "1px solid #7f1d1d", borderRadius: "5px", padding: "6px 8px", marginBottom: "10px", fontSize: "11px", color: "#fca5a5", lineHeight: 1.6 }}>
+                    {startIssues.map((s, i) => <div key={i}>⚠ {s}</div>)}
+                  </div>
+                ) : (
+                  <div style={{ background: "rgba(16,185,129,0.12)", border: "1px solid #065F46", borderRadius: "5px", padding: "5px 8px", marginBottom: "10px", fontSize: "11px", color: "#6EE7B7" }}>✓ Legal start</div>
+                )}
+                <div style={{ marginBottom: "10px" }}>
+                  <label style={LB}>Preset</label>
+                  <select value={startPreset} onChange={(e) => applyPreset(e.target.value)} style={IN}>
+                    {presets.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
+                  <NumField label="X (in)" value={startPose.x} step={0.5} onChange={(v) => updateStart("x", clamp(v))} />
+                  <NumField label="Y (in)" value={startPose.y} step={0.5} onChange={(v) => updateStart("y", clamp(v))} />
+                </div>
+                <label style={LB}>Heading (0 = away from audience)</label>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input type="range" min="0" max="359" value={startPose.heading} onChange={(e) => updateStart("heading", Number(e.target.value))} style={{ flex: 1 }} />
+                  <span style={{ fontSize: "12px", minWidth: "34px" }}>{startPose.heading}°</span>
+                </div>
+              </div>
+
+              {selectedWp && (
+                <div style={{ ...CARD, border: "1px solid #10B981" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "10px", color: "#34D399", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Waypoint {selIdx + 1}</span>
+                    <span style={{ display: "flex", gap: "4px" }}>
+                      <button onClick={() => moveWaypoint(selIdx, -1)} disabled={selIdx === 0} style={{ ...BTN, padding: "1px 7px", opacity: selIdx === 0 ? 0.4 : 1 }}>↑</button>
+                      <button onClick={() => moveWaypoint(selIdx, 1)} disabled={selIdx === waypoints.length - 1} style={{ ...BTN, padding: "1px 7px", opacity: selIdx === waypoints.length - 1 ? 0.4 : 1 }}>↓</button>
+                    </span>
+                  </div>
+                  {wpBlocked[selectedWp.id] && <div style={{ background: "rgba(239,68,68,0.15)", border: "1px solid #7f1d1d", borderRadius: "5px", padding: "6px 8px", marginBottom: "10px", fontSize: "11px", color: "#fca5a5" }}>⚠ Robot overlaps the {wpBlocked[selectedWp.id]}</div>}
+                  {!wpBlocked[selectedWp.id] && legBlocked[selectedWp.id] && <div style={{ background: "rgba(245,158,11,0.13)", border: "1px solid #B45309", borderRadius: "5px", padding: "6px 8px", marginBottom: "10px", fontSize: "11px", color: "#FBBF24" }}>⚠ The path into this waypoint passes through the {legBlocked[selectedWp.id]}</div>}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
+                    <NumField label="X (in)" value={selectedWp.x} step={0.5} onChange={(v) => updateWaypoint(selectedWp.id, "x", clamp(v))} />
+                    <NumField label="Y (in)" value={selectedWp.y} step={0.5} onChange={(v) => updateWaypoint(selectedWp.id, "y", clamp(v))} />
+                  </div>
+                  <label style={LB}>Heading (°)</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                    <input type="range" min="0" max="359" value={selectedWp.heading} onChange={(e) => updateWaypoint(selectedWp.id, "heading", Number(e.target.value))} style={{ flex: 1 }} />
+                    <span style={{ fontSize: "12px", minWidth: "34px" }}>{selectedWp.heading}°</span>
+                  </div>
+                  <div style={{ marginBottom: "10px" }}>
+                    <label style={LB}>Action</label>
+                    <select value={selectedWp.action} style={IN} onChange={(e) => updateWaypoint(selectedWp.id, "action", e.target.value)}>
+                      {visibleActions.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+                    </select>
+                  </div>
+                  {renderActionParams(selectedWp)}
+                  <div style={{ fontSize: "11px", color: "#71717a", marginBottom: "8px" }}>
+                    Leg ≈ {timing.legs[selIdx] ? timing.legs[selIdx].move.toFixed(1) : "0.0"}s
+                    {timing.legs[selIdx] && timing.legs[selIdx].action > 0 ? ` + ${timing.legs[selIdx].action.toFixed(1)}s action` : ""}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                    <button onClick={() => setInsertAfter(selIdx)} style={{ ...BTN, fontSize: "11px" }}>➕ Insert after</button>
+                    <button onClick={() => duplicateWaypoint(selIdx)} style={{ ...BTN, fontSize: "11px" }}>⧉ Duplicate</button>
+                  </div>
+                  <button onClick={() => deleteWaypoint(selectedWp.id)} style={{ marginTop: "6px", width: "100%", fontSize: "12px", background: "transparent", color: "#f87171", border: "1px solid #7f1d1d", borderRadius: "6px", padding: "6px", cursor: "pointer" }}>🗑️ Delete waypoint</button>
+                </div>
+              )}
+
+              <div style={CARD}>
+                <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Display</div>
+                {[["Show tile grid", showGrid, setShowGrid], ["Show zones", showZones, setShowZones], ["Show game pieces", showArtifacts, setShowArtifacts], ["Dim opponent", dimOpponent, setDimOpponent]].map(([lbl, val, set]) => (
+                  <label key={lbl} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", marginBottom: "6px", cursor: "pointer" }}>
+                    <input type="checkbox" checked={val} onChange={(e) => set(e.target.checked)} /> {lbl}
+                  </label>
+                ))}
+                <label style={{ ...LB, marginTop: "6px" }}>Robot size</label>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input type="range" min="12" max="18" value={robotSize} onChange={(e) => setRobotSize(Number(e.target.value))} style={{ flex: 1 }} />
+                  <span style={{ fontSize: "12px", minWidth: "30px" }}>{robotSize}"</span>
+                </div>
+              </div>
+
+              <div style={CARD}>
+                <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Path stats</div>
+                <div style={{ fontSize: "13px", lineHeight: 1.7 }}>
+                  <div>Waypoints: <strong>{waypoints.length}</strong></div>
+                  <div>Distance: <strong>{[startPose, ...waypoints].reduce((acc, p, i, arr) => i ? acc + Math.hypot(p.x - arr[i - 1].x, p.y - arr[i - 1].y) : 0, 0).toFixed(1)}"</strong></div>
+                  <div style={{ color: overBudget ? "#f87171" : "#fafafa" }}>
+                    Est. time: <strong>{timing.total.toFixed(1)}s</strong>{budget ? ` / ${budget}s` : ""}
+                  </div>
+                  {A.tag && <div>Your tag: <strong>{A.tag}</strong></div>}
+                  {season.obstacles.length > 0 && (
+                    <div style={{ color: (blockedCount || legBlockedCount) ? "#f87171" : "#6EE7B7" }}>
+                      {blockedCount || legBlockedCount
+                        ? `⚠ ${blockedCount} point${blockedCount === 1 ? "" : "s"}, ${legBlockedCount} leg${legBlockedCount === 1 ? "" : "s"} blocked`
+                        : "✓ No collisions"}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === "waypoints" && (
+          <div style={{ ...CARD, borderRadius: "12px", padding: "16px" }}>
+            <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", minWidth: "660px", fontSize: "13px", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #3f3f46" }}>
+                  {["#", "X", "Y", "Heading", "Action", "Time"].map(h => <th key={h} style={{ textAlign: "left", padding: "8px 4px", fontWeight: 500 }}>{h}</th>)}
+                  <th style={{ textAlign: "right", padding: "8px 4px", fontWeight: 500, whiteSpace: "nowrap" }}>Edit</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr onClick={() => setSelection({ type: "start" })} style={{ borderBottom: "1px solid #3f3f46", cursor: "pointer", background: selection.type === "start" ? "rgba(245,158,11,0.15)" : "transparent" }}>
+                  <td style={{ padding: "8px 4px" }}><span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: "#B45309", color: "white", fontSize: "11px", fontWeight: "bold" }}>S</span></td>
+                  <td style={{ padding: "8px 4px" }}><input type="number" step="0.5" value={startPose.x} onClick={(e) => e.stopPropagation()} onChange={(e) => updateStart("x", clamp(Number(e.target.value)))} style={{ ...IN, width: "64px" }} /></td>
+                  <td style={{ padding: "8px 4px" }}><input type="number" step="0.5" value={startPose.y} onClick={(e) => e.stopPropagation()} onChange={(e) => updateStart("y", clamp(Number(e.target.value)))} style={{ ...IN, width: "64px" }} /></td>
+                  <td style={{ padding: "8px 4px" }}><input type="number" step="1" min="0" max="359" value={startPose.heading} onClick={(e) => e.stopPropagation()} onChange={(e) => updateStart("heading", Number(e.target.value))} style={{ ...IN, width: "58px" }} /></td>
+                  <td style={{ padding: "8px 4px", color: startLegal ? "#a1a1aa" : "#f87171", fontSize: "12px" }}>{startLegal ? "Starting position" : startIssues[0]}</td>
+                  <td style={{ padding: "8px 4px", color: "#71717a", fontSize: "12px" }}>0.0s</td>
+                  <td style={{ padding: "8px 4px", textAlign: "right", color: "#71717a", fontSize: "11px" }}>locked</td>
+                </tr>
+                {waypoints.map((wp, i) => {
+                  const sel = selection.type === "wp" && selection.id === wp.id;
+                  const bad = wpBlocked[wp.id]; const legBad = legBlocked[wp.id];
+                  const lg = timing.legs[i];
+                  return (
+                    <tr key={wp.id} onClick={() => setSelection({ type: "wp", id: wp.id })} title={bad ? `Overlaps the ${bad}` : (legBad ? `Path passes through the ${legBad}` : "")}
+                        style={{ borderBottom: "1px solid #3f3f46", cursor: "pointer", background: bad ? "rgba(239,68,68,0.13)" : (legBad ? "rgba(245,158,11,0.10)" : (sel ? "rgba(16,185,129,0.15)" : "transparent")) }}>
+                      <td style={{ padding: "8px 4px" }}><span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "50%", background: bad ? "#B91C1C" : (legBad ? "#B45309" : "#10B981"), color: "white", fontSize: "11px", fontWeight: "bold" }}>{i + 1}</span></td>
+                      <td style={{ padding: "8px 4px" }}><input type="number" step="0.5" value={wp.x} onClick={(e) => e.stopPropagation()} onChange={(e) => updateWaypoint(wp.id, "x", clamp(Number(e.target.value)))} style={{ ...IN, width: "64px" }} /></td>
+                      <td style={{ padding: "8px 4px" }}><input type="number" step="0.5" value={wp.y} onClick={(e) => e.stopPropagation()} onChange={(e) => updateWaypoint(wp.id, "y", clamp(Number(e.target.value)))} style={{ ...IN, width: "64px" }} /></td>
+                      <td style={{ padding: "8px 4px" }}><input type="number" step="1" min="0" max="359" value={wp.heading} onClick={(e) => e.stopPropagation()} onChange={(e) => updateWaypoint(wp.id, "heading", Number(e.target.value))} style={{ ...IN, width: "58px" }} /></td>
+                      <td style={{ padding: "8px 4px" }}>
+                        <select value={wp.action} onClick={(e) => e.stopPropagation()} onChange={(e) => updateWaypoint(wp.id, "action", e.target.value)} style={{ ...IN, width: "148px" }}>
+                          {visibleActions.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "8px 4px", fontSize: "12px", color: "#a1a1aa" }}>{lg ? `${(lg.move + lg.action).toFixed(1)}s` : "-"}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "right", whiteSpace: "nowrap", width: "1%" }}>
+                        <button onClick={(e) => { e.stopPropagation(); moveWaypoint(i, -1); }} disabled={i === 0} style={{ ...BTN, padding: "2px 7px", marginRight: "3px", opacity: i === 0 ? 0.4 : 1 }}>↑</button>
+                        <button onClick={(e) => { e.stopPropagation(); moveWaypoint(i, 1); }} disabled={i === waypoints.length - 1} style={{ ...BTN, padding: "2px 7px", marginRight: "3px", opacity: i === waypoints.length - 1 ? 0.4 : 1 }}>↓</button>
+                        <button onClick={(e) => { e.stopPropagation(); duplicateWaypoint(i); }} style={{ ...BTN, padding: "2px 7px", marginRight: "3px" }}>⧉</button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteWaypoint(wp.id); }} style={{ ...BTN, padding: "2px 8px", color: "#f87171", borderColor: "#7f1d1d" }}>×</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            </div>
+            {waypoints.length > 0 && (
+              <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #3f3f46", fontSize: "13px", display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#a1a1aa" }}>Total</span>
+                <span style={{ color: overBudget ? "#f87171" : "#6EE7B7", fontWeight: 500 }}>
+                  {timing.total.toFixed(1)}s{budget ? ` of ${budget}s AUTO` : ""}{overBudget ? " — over budget" : ""}
+                </span>
+              </div>
+            )}
+            {waypoints.length === 0 && <div style={{ textAlign: "center", padding: "1.5rem", color: "#71717a", fontSize: "13px" }}>Set your start position above, then click the field to add waypoints.</div>}
+          </div>
+        )}
+
+        {tab === "motion" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={CARD}>
+                <div style={{ fontSize: "13px", fontWeight: 500, marginBottom: "4px" }}>Stop-at-waypoint model</div>
+                <div style={{ fontSize: "11.5px", color: "#a1a1aa", lineHeight: 1.65, marginBottom: "12px" }}>
+                  Each leg accelerates, cruises, decelerates, and settles inside tolerance before the next begins.
+                  Translation and rotation run together, so a leg costs whichever takes longer.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <NumField label="Max velocity" value={motion.maxVelocity} step={1} min={1} suffix="in/s" onChange={(v) => setM("maxVelocity", v)} />
+                  <NumField label="Max accel" value={motion.maxAccel} step={5} min={1} suffix="in/s²" onChange={(v) => setM("maxAccel", v)} />
+                  <NumField label="Turn rate" value={motion.turnRate} step={10} min={1} suffix="°/s" onChange={(v) => setM("turnRate", v)} />
+                  <NumField label="Settle time" value={motion.settleTime} step={0.05} min={0} suffix="s" onChange={(v) => setM("settleTime", v)} />
+                </div>
+              </div>
+
+              <div style={CARD}>
+                <div style={{ fontSize: "13px", fontWeight: 500, marginBottom: "10px" }}>Tolerances &amp; limits</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <NumField label="Position tolerance" value={motion.posTolerance} step={0.1} min={0.1} suffix="in" onChange={(v) => setM("posTolerance", v)} />
+                  <NumField label="Heading tolerance" value={motion.headingTolerance} step={0.5} min={0.1} suffix="°" onChange={(v) => setM("headingTolerance", v)} />
+                  <NumField label="Runaway margin" value={motion.runawayMargin} step={1} min={1} suffix="in" onChange={(v) => setM("runawayMargin", v)} />
+                  <div />
+                  <NumField label="Timeout base" value={motion.timeoutBase} step={0.25} min={0} suffix="s" onChange={(v) => setM("timeoutBase", v)} />
+                  <NumField label="Timeout factor" value={motion.timeoutFactor} step={0.25} min={1} suffix="x" onChange={(v) => setM("timeoutFactor", v)} />
+                  <NumField label="Min power" value={motion.minPower} step={0.01} min={0} max={1} onChange={(v) => setM("minPower", v)} />
+                  <NumField label="Max power" value={motion.maxPower} step={0.05} min={0} max={1} onChange={(v) => setM("maxPower", v)} />
+                </div>
+                <div style={{ fontSize: "11px", color: "#71717a", marginTop: "8px", lineHeight: 1.6 }}>
+                  Min power is the floor needed to overcome static friction near the target — too low and the robot stalls short of tolerance.
+                  <br /><br />
+                  Each leg gets <em>base + factor × its estimated time</em>, capped at {motion.timeoutCeiling}s. A single flat timeout
+                  cannot work: it is either unreachable for a long leg or useless for a short one.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={CARD}>
+                <div style={{ fontSize: "13px", fontWeight: 500, marginBottom: "10px" }}>Translation PID</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                  <NumField label="kP" value={motion.transP} step={0.005} onChange={(v) => setM("transP", v)} />
+                  <NumField label="kI" value={motion.transI} step={0.001} onChange={(v) => setM("transI", v)} />
+                  <NumField label="kD" value={motion.transD} step={0.001} onChange={(v) => setM("transD", v)} />
+                </div>
+              </div>
+
+              <div style={CARD}>
+                <div style={{ fontSize: "13px", fontWeight: 500, marginBottom: "10px" }}>Heading PID</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                  <NumField label="kP" value={motion.headP} step={0.005} onChange={(v) => setM("headP", v)} />
+                  <NumField label="kI" value={motion.headI} step={0.001} onChange={(v) => setM("headI", v)} />
+                  <NumField label="kD" value={motion.headD} step={0.001} onChange={(v) => setM("headD", v)} />
+                </div>
+              </div>
+
+              <div style={{ ...CARD, background: "rgba(245,158,11,0.09)", borderColor: "#B45309" }}>
+                <div style={{ fontSize: "12px", color: "#FBBF24", fontWeight: 500, marginBottom: "6px" }}>⚠ These are starting guesses, not tuned values</div>
+                <div style={{ fontSize: "11.5px", color: "#d4d4d8", lineHeight: 1.65 }}>
+                  PID gains cannot be derived on paper — they depend on your robot's mass, wheel grip, and battery state.
+                  The defaults are conservative placeholders so the generated code compiles and moves. Real gains come from
+                  a field session: raise kP until it oscillates, then back off and add kD. The velocity and accel figures
+                  also drive the time estimate, so an untuned robot will not match the predicted runtime.
+                </div>
+              </div>
+
+              <div style={CARD}>
+                <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Timing check</div>
+                <div style={{ fontSize: "13px", lineHeight: 1.8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>Legs</span><strong>{timing.legs.reduce((a, l) => a + l.move, 0).toFixed(1)}s</strong></div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>Actions</span><strong>{timing.legs.reduce((a, l) => a + l.action, 0).toFixed(1)}s</strong></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #3f3f46", marginTop: "4px", paddingTop: "4px", color: overBudget ? "#f87171" : "#6EE7B7" }}>
+                    <span>Total</span><strong>{timing.total.toFixed(1)}s{budget ? ` / ${budget}s` : ""}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={() => setMotion(DEFAULT_MOTION)} style={BTN}>↺ Reset to defaults</button>
+            </div>
+          </div>
+        )}
+
+        {tab === "code" && (
+          <div style={{ ...CARD, borderRadius: "12px", padding: "16px" }}>
+            <div style={{ background: "rgba(59,130,246,0.10)", border: "1px solid #1D4ED8", borderRadius: "6px", padding: "8px 10px", marginBottom: "12px", fontSize: "11.5px", color: "#93C5FD", lineHeight: 1.6 }}>
+              Self-contained — paste this one file into OnBot Java and build. Odometry, motion, vision, and your
+              mechanism macros are all inside the class, so nothing else has to be on the Hub.
+              {profile ? "" : " No robot profile loaded, so hardware names and odometry constants are defaults."}
+              {profile && profile.odometry && profile.odometry.calibration && profile.odometry.calibration.status === "calibrated"
+                ? "" : " Odometry is uncalibrated — run OdometryCalibration and re-export the profile."}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <label style={{ fontSize: "12px", color: "#a1a1aa" }}>Path name</label>
+                <input type="text" value={pathName} onChange={(e) => setPathName(e.target.value)}
+                       style={{ ...IN, width: "170px" }} placeholder="Blue Depot" />
+                <span style={{ fontSize: "11px", color: "#71717a" }}>→ {opModeClassName}.java</span>
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button onClick={() => navigator.clipboard.writeText(generateCode())} style={BTN}>📋 Copy</button>
+                <button onClick={() => {
+                  try {
+                    const blob = new Blob([generateCode()], { type: "text/x-java-source" });
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${opModeClassName}.java`;
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  } catch {
+                    setNotice({ bad: true, msg: "Download is blocked in this preview — use Copy instead." });
+                  }
+                }} style={BTN}>⬇ .java</button>
+              </div>
+            </div>
+            <pre style={{ background: "#18181b", padding: "12px", borderRadius: "8px", fontSize: "11px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", overflow: "auto", maxHeight: "460px", margin: 0, whiteSpace: "pre-wrap", color: "#d4d4d8" }}>{generateCode()}</pre>
+          </div>
+        )}
+
+        {tab === "field" && (
+          <div style={{ ...CARD, borderRadius: "12px", padding: "16px", fontSize: "13px", lineHeight: 1.8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "14px" }}>
+              <div>
+                <h2 style={{ fontSize: "16px", fontWeight: 500, margin: "0 0 4px" }}>{season.name} {season.years}</h2>
+                <div style={{ color: "#a1a1aa", fontSize: "12px" }}>Source: {season.source}</div>
+              </div>
+              <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                <button onClick={exportPack} style={BTN}>💾 Save season pack</button>
+                <button onClick={() => openImport("Load season pack", loadPackText)} style={BTN}>📂 Load pack</button>
+              </div>
+            </div>
+
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+              <tbody>
+                {[
+                  ["Format", `pathpilotSeason ${DSL_VERSION}`],
+                  ["Field", `${season.field.size}" × ${season.field.size}", ${season.field.tile}" tiles`],
+                  ["AUTO period", season.autoSeconds ? `${season.autoSeconds}s` : "not specified"],
+                  ["Drawn geometry", `${(G.rects || []).length} rects, ${(G.polygons || []).length} polygons, ${(G.tapeLines || []).length} tape lines, ${(G.markers || []).length} markers`],
+                  ["Obstacles", season.obstacles.length ? season.obstacles.map(o => o.name).join(", ") : "none"],
+                  ["Launch lines", season.launchLines.length || "none"],
+                  ["Start rules", (season.dsl.startRules || []).map(r => r.type).join(", ") || "none"],
+                  ["Field tags", season.tags.length ? season.tags.map(t => `${t.id} (${season.alliances[t.owner].label})`).join(", ") : "none"],
+                  ["Off-field tags", season.offFieldTags.length ? season.offFieldTags.map(o => `${o.ids} — ${o.note}`).join("; ") : "none"],
+                  ["Blue start", season.alliances.blue.startRegion.label],
+                  ["Red start", season.alliances.red.startRegion.label],
+                  ["Mirror", `${season.mirror.axis} = ${season.mirror.at}`],
+                  ["Actions", season.actions.length],
+                ].map(([k, v]) => (
+                  <tr key={k} style={{ borderBottom: "1px solid #3f3f46" }}>
+                    <td style={{ padding: "7px 4px", color: "#a1a1aa", width: "150px", verticalAlign: "top" }}>{k}</td>
+                    <td style={{ padding: "7px 4px" }}>{v}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ marginTop: "16px", padding: "10px 12px", background: "#18181b", borderRadius: "6px", border: "1px solid #3f3f46", fontSize: "12px", color: "#a1a1aa", lineHeight: 1.7 }}>
+              <strong style={{ color: "#fafafa", fontWeight: 500 }}>Season packs are pure JSON.</strong><br />
+              A pack describes a field — geometry, obstacles, rules, actions — and contains no code, so importing one
+              cannot execute anything. Size-dependent values like start presets use arithmetic expressions
+              (<code style={{ color: "#FBBF24" }}>"48 + r"</code>), evaluated by a parser that only understands numbers and
+              <code style={{ color: "#FBBF24" }}> + − × ÷</code>.
+              <br /><br />
+              On import, every preset is checked against the pack's own start rules at several robot sizes. Failures are
+              reported rather than silently accepted. Authoring a new season still means reading the game manual carefully —
+              measurements from figures need a human eye, and a wrong number produces a path that misses rather than an error.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(<PathPilot />);
+
+</script>
+</body>
+</html>
