@@ -1,0 +1,157 @@
+{
+  "pathpilotSeason": 1,
+  "id": "into-the-deep-2024",
+  "name": "INTO THE DEEP",
+  "years": "2024-2025",
+  "verified": false,
+  "source": "FTC Competition Manual V14 (20 Mar 2025) — sections 9.1-9.8, 10.3-10.5, rule G303",
+  "autoSeconds": 30,
+
+  "field": {
+    "size": 144,
+    "tile": 24,
+    "columns": ["A", "B", "C", "D", "E", "F"],
+    "audienceLabel": "AUDIENCE"
+  },
+
+  "alliances": {
+    "blue": {
+      "color": "#3B82F6",
+      "label": "Blue",
+      "areaSide": "left",
+      "wall": "left",
+      "tag": null,
+      "startRegion": { "label": "touching the blue wall, clear of the net and observation zones" }
+    },
+    "red": {
+      "color": "#EF4444",
+      "label": "Red",
+      "areaSide": "right",
+      "wall": "right",
+      "tag": null,
+      "startRegion": { "label": "touching the red wall, clear of the net and observation zones" }
+    }
+  },
+
+  "mirror": { "axis": "rotate180", "at": 72, "tagSwap": {} },
+
+  "geometry": {
+    "polygons": [
+      { "key": "net-blue", "kind": "zone", "owner": "blue",
+        "points": [[0, 144], [22.75, 144], [0, 121.25]],
+        "label": "NET", "labelAt": [7, 137] },
+      { "key": "net-red", "kind": "zone", "owner": "red",
+        "points": [[144, 0], [121.25, 0], [144, 22.75]],
+        "label": "NET", "labelAt": [137, 7] },
+
+      { "key": "ascent-far", "kind": "zone",
+        "points": [[49.6, 96.1], [94.4, 96.1], [94.4, 105.35], [72, 116.1], [49.6, 105.35]],
+        "label": "ASCENT", "labelAt": [72, 103] },
+      { "key": "ascent-audience", "kind": "zone",
+        "points": [[49.6, 47.9], [94.4, 47.9], [94.4, 38.65], [72, 27.9], [49.6, 38.65]],
+        "label": "ASCENT", "labelAt": [72, 41] },
+
+      { "key": "submersible", "kind": "structure",
+        "points": [[47.875, 47.9], [96.125, 47.9], [96.125, 96.1], [47.875, 96.1]],
+        "label": "SUBMERSIBLE", "labelAt": [72, 72] }
+    ],
+
+    "rects": [
+      { "key": "obs-blue", "owner": "blue", "x": 0, "y": 0, "width": 13.1, "height": 36.6,
+        "label": "OBS", "dashed": true },
+      { "key": "obs-red", "owner": "red", "x": 130.9, "y": 107.4, "width": 13.1, "height": 36.6,
+        "label": "OBS", "dashed": true },
+
+      { "key": "sub-zone", "x": 50.625, "y": 58.25, "width": 42.75, "height": 27.5 },
+
+      { "key": "chamber-blue", "owner": "blue", "x": 49.6, "y": 58.25, "width": 2, "height": 26.5 },
+      { "key": "chamber-red", "owner": "red", "x": 92.4, "y": 58.25, "width": 2, "height": 26.5 }
+    ],
+
+    "tapeLines": [],
+
+    "markers": [
+      { "x": 28, "y": 6, "len": 3.5, "motif": "B" },
+      { "x": 28, "y": 12, "len": 3.5, "motif": "B" },
+      { "x": 28, "y": 18, "len": 3.5, "motif": "B" },
+
+      { "x": 112.5, "y": 126, "len": 3.5, "motif": "R" },
+      { "x": 112.5, "y": 132, "len": 3.5, "motif": "R" },
+      { "x": 112.5, "y": 138, "len": 3.5, "motif": "R" },
+
+      { "x": 28, "y": 126, "len": 3.5, "motif": "N" },
+      { "x": 28, "y": 132, "len": 3.5, "motif": "N" },
+      { "x": 28, "y": 138, "len": 3.5, "motif": "N" },
+
+      { "x": 112.5, "y": 6, "len": 3.5, "motif": "N" },
+      { "x": 112.5, "y": 12, "len": 3.5, "motif": "N" },
+      { "x": 112.5, "y": 18, "len": 3.5, "motif": "N" }
+    ],
+    "markerColors": { "B": "#3B82F6", "R": "#EF4444", "N": "#EAB308" }
+  },
+
+  "tags": [
+    { "id": 11, "owner": "blue", "x": 0, "y": 36 },
+    { "id": 12, "owner": "blue", "x": 0, "y": 108 },
+    { "id": 13, "owner": null, "x": 72, "y": 144 },
+    { "id": 14, "owner": "red", "x": 144, "y": 108 },
+    { "id": 15, "owner": "red", "x": 144, "y": 36 },
+    { "id": 16, "owner": null, "x": 72, "y": 0 }
+  ],
+  "offFieldTags": [],
+
+  "obstacles": [
+    {
+      "name": "SUBMERSIBLE",
+      "role": "structure",
+      "shape": { "type": "polygon",
+        "points": [[47.875, 47.9], [96.125, 47.9], [96.125, 96.1], [47.875, 96.1]] }
+    }
+  ],
+
+  "launchLines": [],
+
+  "presetsDefinedFor": "blue",
+  "startPresets": [
+    { "id": "wallAudience", "label": "{Alliance} wall, audience side",
+      "x": "r", "y": "38 + r", "heading": 90 },
+    { "id": "wallFar", "label": "{Alliance} wall, far side",
+      "x": "r", "y": "119 - r", "heading": 90 }
+  ],
+
+  "startRules": [
+    { "type": "insideField",
+      "message": "G303.E: the robot must be fully inside the FIELD" },
+    { "type": "noOverlap", "grace": 1,
+      "message": "Robot overlaps the {obstacle}" },
+    { "type": "touchingWall", "wall": "alliance",
+      "message": "G303.F: must touch the FIELD wall adjacent to your ALLIANCE AREA" },
+    { "type": "notInZones", "zones": ["net-blue", "net-red", "obs-blue", "obs-red"],
+      "message": "G303.E: cannot start in the {zone} zone" }
+  ],
+
+  "actions": [
+    { "id": "none", "label": "None", "icon": "⬆️", "est": 0 },
+    { "id": "wait", "label": "Wait", "icon": "⏱️", "est": 1, "durationFrom": "time",
+      "params": [{ "key": "time", "label": "Wait time (sec)", "type": "number", "default": 1, "step": 0.1, "min": 0.1 }],
+      "emit": ["sleep({time:ms});"] },
+    { "id": "faceTag", "label": "Face AprilTag", "icon": "👁️", "est": 0.6,
+      "params": [{ "key": "tagId", "label": "Tag ID", "type": "tagId", "default": 13 }],
+      "emit": ["faceAprilTag({tagId});"] },
+    { "id": "driveToTag", "label": "Drive to AprilTag", "icon": "🏷️", "est": 1.5,
+      "params": [
+        { "key": "tagId", "label": "Tag ID", "type": "tagId", "default": 13 },
+        { "key": "distance", "label": "Distance (in)", "type": "number", "default": 12, "step": 0.5 }
+      ],
+      "emit": ["driveToAprilTag({tagId}, {distance});"] },
+    { "id": "macro", "label": "Robot macro", "icon": "📋", "est": 1.0,
+      "params": [{ "key": "macroMethod", "label": "Macro", "type": "macro", "default": "" }],
+      "emit": ["{macroMethod}();"] }
+  ],
+
+  "codeNotes": [
+    "AUTO period is 30 seconds",
+    "G303: start touching your alliance wall, fully inside the FIELD, and clear of the NET and OBSERVATION zones",
+    "AprilTags 11-16 sit outside the perimeter walls facing inward"
+  ]
+}
