@@ -97,6 +97,78 @@ const sweepHitsPoly = (x1, y1, x2, y2, r, poly) => {
   return false;
 };
 
+/**
+ * The robot as an oriented rectangle rather than a circle.
+ *
+ * A circle inscribed in the chassis is right only when the robot is square to
+ * the walls. At 45 degrees a 17 in. square reaches 12.0 in. to its corner, not
+ * 8.5 — so a circle model lets a corner sit inside a structure while reporting
+ * clearance, and refuses to sit flush against a wall.
+ *
+ * heading 0 faces +Y, increasing clockwise, so the robot's forward axis is
+ * (sin h, cos h) and its right axis is (cos h, -sin h).
+ */
+const robotCorners = (cx, cy, headingDeg, lengthIn, widthIn) => {
+  const h = headingDeg * Math.PI / 180;
+  const fx = Math.sin(h), fy = Math.cos(h);
+  const rx = Math.cos(h), ry = -Math.sin(h);
+  const hl = lengthIn / 2, hw = widthIn / 2;
+  return [
+    [cx + fx * hl + rx * hw, cy + fy * hl + ry * hw],
+    [cx + fx * hl - rx * hw, cy + fy * hl - ry * hw],
+    [cx - fx * hl - rx * hw, cy - fy * hl - ry * hw],
+    [cx - fx * hl + rx * hw, cy - fy * hl + ry * hw],
+  ];
+};
+
+/** Separating-axis test between two convex polygons. */
+const polysOverlap = (a, b) => {
+  const axes = [];
+  [a, b].forEach(poly => {
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length];
+      const ex = q[0] - p[0], ey = q[1] - p[1];
+      const len = Math.hypot(ex, ey);
+      if (len > 1e-9) axes.push([-ey / len, ex / len]);
+    }
+  });
+  for (const [ax, ay] of axes) {
+    let aMin = Infinity, aMax = -Infinity, bMin = Infinity, bMax = -Infinity;
+    a.forEach(([x, y]) => { const d = x * ax + y * ay; if (d < aMin) aMin = d; if (d > aMax) aMax = d; });
+    b.forEach(([x, y]) => { const d = x * ax + y * ay; if (d < bMin) bMin = d; if (d > bMax) bMax = d; });
+    if (aMax < bMin || bMax < aMin) return false;
+  }
+  return true;
+};
+
+/** Shrinks a polygon toward its centre, so contact is not counted as overlap. */
+const shrinkPoly = (poly, inches) => {
+  const cx = poly.reduce((a, p) => a + p[0], 0) / poly.length;
+  const cy = poly.reduce((a, p) => a + p[1], 0) / poly.length;
+  return poly.map(([x, y]) => {
+    const dx = x - cx, dy = y - cy;
+    const d = Math.hypot(dx, dy);
+    if (d <= inches) return [cx, cy];
+    return [cx + dx * (d - inches) / d, cy + dy * (d - inches) / d];
+  });
+};
+
+/** Smallest gap between two polygons; 0 when they overlap. */
+const polyDistance = (a, b) => {
+  if (polysOverlap(a, b)) return 0;
+  let best = Infinity;
+  const scan = (p1, p2) => {
+    for (const [px, py] of p1) {
+      for (let i = 0; i < p2.length; i++) {
+        const p = p2[i], q = p2[(i + 1) % p2.length];
+        best = Math.min(best, distToSeg(px, py, p[0], p[1], q[0], q[1]));
+      }
+    }
+  };
+  scan(a, b); scan(b, a);
+  return best;
+};
+
 const shapeToPoly = (shape) => {
   if (shape.type === "rect") {
     const { x, y, width, height } = shape;
@@ -165,8 +237,14 @@ const evalExpr = (expr, vars) => {
   return out;
 };
 
-const exprVars = (dsl, robotSize) => ({
+const exprVars = (dsl, robotSize, robotLength, robotWidth) => ({
   r: robotSize / 2,
+  // Half-extent along the robot's own axes, and the reach to a corner. A square
+  // robot at 45 degrees presents its corner, not its face, so a standoff built
+  // from r alone puts the corner inside whatever it is parked against.
+  halfLength: (robotLength || robotSize) / 2,
+  halfWidth: (robotWidth || robotSize) / 2,
+  halfDiagonal: Math.hypot(robotLength || robotSize, robotWidth || robotSize) / 2,
   robotSize,
   size: dsl.field.size,
   field: dsl.field.size,
@@ -213,8 +291,8 @@ function compileSeason(dsl) {
 
   /* Presets are authored once for dsl.presetsDefinedFor and mirrored for the
    * other alliance, so the two halves can never drift apart. */
-  const getPresets = (alliance, robotSize) => {
-    const vars = exprVars(dsl, robotSize);
+  const getPresets = (alliance, robotSize, robotLength, robotWidth) => {
+    const vars = exprVars(dsl, robotSize, robotLength, robotWidth);
     const base = dsl.presetsDefinedFor || "blue";
     const flip = alliance !== base;
     const out = (dsl.startPresets || []).map(p => {
@@ -236,9 +314,12 @@ function compileSeason(dsl) {
 
   /* Declarative rule engine. Each entry in startRules names a check type; the
    * message may reference {obstacle} or {region}. */
-  const validateStart = (pose, { alliance, robotSize }) => {
-    const r = robotSize / 2;
+  const validateStart = (pose, { alliance, robotSize, robotLength, robotWidth }) => {
+    const L = robotLength || robotSize;
+    const W = robotWidth || robotSize;
+    const r = Math.max(L, W) / 2;             // still used by line-proximity rules
     const { x, y } = pose;
+    const body = robotCorners(x, y, pose.heading, L, W);
     const issues = [];
     const A = dsl.alliances[alliance];
 
@@ -246,8 +327,9 @@ function compileSeason(dsl) {
       switch (rule.type) {
         case "noOverlap": {
           const grace = rule.grace || 0;
+          const shrunk = grace > 0 ? shrinkPoly(body, grace) : body;
           for (const o of obstacles) {
-            if (circleHitsPoly(x, y, r - grace, o.poly))
+            if (polysOverlap(shrunk, o.poly))
               issues.push((rule.message || "Robot overlaps the {obstacle}").replace("{obstacle}", o.name));
           }
           break;
@@ -255,11 +337,12 @@ function compileSeason(dsl) {
         case "withinRegion": {
           const reg = A.startRegion;
           if (!reg) break;
+          const xs = body.map(p => p[0]), ys = body.map(p => p[1]);
           const bad =
-            (reg.xMin !== undefined && x - r < reg.xMin) ||
-            (reg.xMax !== undefined && x + r > reg.xMax) ||
-            (reg.yMin !== undefined && y - r < reg.yMin) ||
-            (reg.yMax !== undefined && y + r > reg.yMax);
+            (reg.xMin !== undefined && Math.min(...xs) < reg.xMin) ||
+            (reg.xMax !== undefined && Math.max(...xs) > reg.xMax) ||
+            (reg.yMin !== undefined && Math.min(...ys) < reg.yMin) ||
+            (reg.yMax !== undefined && Math.max(...ys) > reg.yMax);
           if (bad) issues.push((rule.message || "Outside {region}").replace("{region}", reg.label || "the start region"));
           break;
         }
@@ -271,13 +354,15 @@ function compileSeason(dsl) {
         case "touchingAny": {
           let ok = false;
           for (const t of rule.targets || []) {
-            if (t === "perimeter" && (x - r <= 0.5 || x + r >= S - 0.5 || y - r <= 0.5 || y + r >= S - 0.5)) ok = true;
+            const xs = body.map(p => p[0]), ys = body.map(p => p[1]);
+            if (t === "perimeter" && (Math.min(...xs) <= 0.5 || Math.max(...xs) >= S - 0.5
+                                   || Math.min(...ys) <= 0.5 || Math.max(...ys) >= S - 0.5)) ok = true;
             if (t === "ownGoal") {
               const g = obstacles.find(o => o.owner === alliance && o.role === "goal");
-              if (g && circleNearPolyEdge(x, y, r + 1, g.poly)) ok = true;
+              if (g && polyDistance(body, g.poly) <= 1.0) ok = true;
             }
             if (t === "anyStructure") {
-              if (obstacles.some(o => circleNearPolyEdge(x, y, r + 1, o.poly))) ok = true;
+              if (obstacles.some(o => polyDistance(body, o.poly) <= 1.0)) ok = true;
             }
           }
           if (!ok) issues.push(rule.message || "Must touch a legal surface");
@@ -287,11 +372,12 @@ function compileSeason(dsl) {
           // "Touching the FIELD wall adjacent to the ALLIANCE AREA" — which wall
           // that is depends on the alliance, so it comes from the alliance record.
           const wall = rule.wall === "alliance" ? A.wall : rule.wall;
+          const xs = body.map(p => p[0]), ys = body.map(p => p[1]);
           const touching =
-            (wall === "left" && x - r <= 0.5) ||
-            (wall === "right" && x + r >= S - 0.5) ||
-            (wall === "audience" && y - r <= 0.5) ||
-            (wall === "far" && y + r >= S - 0.5);
+            (wall === "left" && Math.min(...xs) <= 0.5) ||
+            (wall === "right" && Math.max(...xs) >= S - 0.5) ||
+            (wall === "audience" && Math.min(...ys) <= 0.5) ||
+            (wall === "far" && Math.max(...ys) >= S - 0.5);
           if (!touching) issues.push(rule.message || `Must touch the ${wall} wall`);
           break;
         }
@@ -305,7 +391,7 @@ function compileSeason(dsl) {
             if (!shape) return;
             const owner = (rect || poly).owner;
             if (rule.ownZonesOnly && owner && owner !== alliance) return;
-            if (circleHitsPoly(x, y, r, shape)) {
+            if (polysOverlap(body, shape)) {
               issues.push((rule.message || "Cannot start in {zone}")
                 .replace("{zone}", (rect || poly).label || key));
             }
@@ -313,7 +399,10 @@ function compileSeason(dsl) {
           break;
         }
         case "insideField": {
-          if (x - r < 0 || x + r > S || y - r < 0 || y + r > S)
+          const xs = body.map(p => p[0]), ys = body.map(p => p[1]);
+          const EPS = 0.02;   // a flush robot sits exactly on the boundary
+          if (Math.min(...xs) < -EPS || Math.max(...xs) > S + EPS
+              || Math.min(...ys) < -EPS || Math.max(...ys) > S + EPS)
             issues.push(rule.message || "Robot must be fully inside the field");
           break;
         }
@@ -394,7 +483,9 @@ const DEFAULT_MOTION = {
   posTolerance: 1.0,    // in
   headingTolerance: 2,  // deg
   settleTime: 0.15,     // s
-  runawayMargin: 4.0,   // in — abort if the error grows this far past its start
+  runawayMargin: 4.0,   // in — abort if the error diverges this far from its best
+  runawayMinDistance: 6.0, // in — legs shorter than this are turns, not drives
+  logRuns: true,        // write a CSV of every loop to the Control Hub
   timeoutBase: 1.5,     // s of slack per leg
   timeoutFactor: 2.5,   // multiple of the estimated leg time
   timeoutCeiling: 8.0,  // s hard cap
@@ -523,9 +614,13 @@ const DECODE_PACK = {
    * audience-side LAUNCH ZONE produce legal starts. */
   presetsDefinedFor: "blue",
   startPresets: [
-    { id: "depotFacing", label: "{Alliance} depot, facing goal", x: "19 + (r + 0.2) / SQRT2", y: "125 - (r + 0.2) / SQRT2", heading: 315 },
-    { id: "depotAway", label: "{Alliance} depot, facing field", x: "19 + (r + 0.2) / SQRT2", y: "125 - (r + 0.2) / SQRT2", heading: 135 },
-    { id: "audience", label: "Audience launch line", x: "48 + r", y: "r", heading: 0 },
+    // At 315/135 the robot presents a face to the 45-degree goal chord, so the
+    // standoff is halfLength, not the corner reach. Perpendicular to the chord
+    // the offset splits evenly between x and y, hence the SQRT2.
+    { id: "depotFacing", label: "{Alliance} depot, facing goal", x: "19 + (halfLength + 0.2) / SQRT2", y: "125 - (halfLength + 0.2) / SQRT2", heading: 315 },
+    { id: "depotAway", label: "{Alliance} depot, facing field", x: "19 + (halfLength + 0.2) / SQRT2", y: "125 - (halfLength + 0.2) / SQRT2", heading: 135 },
+    // Facing 0, the robot presents its side to the near wall and its back to it.
+    { id: "audience", label: "Audience launch line", x: "48 + halfWidth", y: "halfLength", heading: 0 },
   ],
 
   startRules: [
@@ -583,8 +678,8 @@ const BLANK_PACK = {
   presetsDefinedFor: "blue",
   startPresets: [
     { id: "center", label: "Center of field", x: "half", y: "half", heading: 0 },
-    { id: "nearWall", label: "Against near wall", x: "half", y: "r", heading: 0 },
-    { id: "corner", label: "{Alliance}-side near corner", x: "r", y: "r", heading: 0 },
+    { id: "nearWall", label: "Against near wall", x: "half", y: "halfLength", heading: 0 },
+    { id: "corner", label: "{Alliance}-side near corner", x: "halfWidth", y: "halfLength", heading: 0 },
   ],
   startRules: [
     { type: "insideField", message: "Robot must be fully inside the field" },
@@ -988,15 +1083,15 @@ const DEEP_PACK = {
     {
       "id": "wallAudience",
       "label": "{Alliance} wall, audience side",
-      "x": "r",
-      "y": "38 + r",
+      "x": "halfLength + 0.05",
+      "y": "38 + halfWidth",
       "heading": 90
     },
     {
       "id": "wallFar",
       "label": "{Alliance} wall, far side",
-      "x": "r",
-      "y": "119 - r",
+      "x": "halfLength + 0.05",
+      "y": "119 - halfWidth",
       "heading": 90
     }
   ],
@@ -1257,6 +1352,12 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "import com.qualcomm.robotcore.hardware.DcMotorSimple;",
     "import com.qualcomm.robotcore.hardware.IMU;");
   if (macroServos.size || macroBlinkin) P("import com.qualcomm.robotcore.hardware.Servo;");
+  if (motion.logRuns) {
+    P("import java.io.File;",
+      "import java.io.FileWriter;",
+      "import java.io.IOException;",
+      "import java.util.Locale;");
+  }
   P("import com.qualcomm.robotcore.util.ElapsedTime;",
     "",
     "import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;");
@@ -1312,6 +1413,7 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "     * usually an inverted pod. Stopping after a couple of inches of divergence",
     "     * beats driving at full power until the timeout expires. */",
     `    public static final double RUNAWAY_MARGIN = ${motion.runawayMargin};      // in`,
+    `    public static final double RUNAWAY_MIN_DISTANCE = ${motion.runawayMinDistance};  // in`,
     `    public static final double MIN_POWER = ${motion.minPower};           // beats static friction`,
     `    public static final double MAX_POWER = ${motion.maxPower};`,
     "",
@@ -1376,11 +1478,26 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "    private boolean aborted = false;",
     "");
 
+  if (motion.logRuns) {
+    P("    /* Run log. Buffered in memory and written once at the end — writing to",
+      "     * storage inside the control loop would stall it. ~1500 rows for a 30s",
+      "     * run at 50Hz, so memory is not a concern, but the cap stops a runaway",
+      "     * loop from exhausting it. */",
+      "    private static final String LOG_DIR = \"/sdcard/FIRST/pathpilot\";",
+      "    private static final int LOG_MAX_ROWS = 20000;",
+      "    private StringBuilder logBuffer;",
+      "    private int logRows = 0;",
+      "    private final ElapsedTime runClock = new ElapsedTime();",
+      "    private double lastLoopStamp = 0;",
+      "");
+  }
+
   /* ---------------- runOpMode ---------------- */
   P("    @Override",
     "    public void runOpMode() {",
     "        initHardware();",
     "        setPose(START_X, START_Y, START_HEADING);",
+    ...(motion.logRuns ? ["        logInit();"] : []),
     "",
     '        telemetry.addLine("PathPilot ready");',
     '        telemetry.addData("start", "%.1f, %.1f @ %.0f", START_X, START_Y, START_HEADING);');
@@ -1409,14 +1526,89 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "    }",
     "");
 
+  if (motion.logRuns) {
+    const planned = waypoints.map((wp, i) =>
+      `# waypoint,${i + 1},${wp.x.toFixed(1)},${wp.y.toFixed(1)},${wp.heading},${wp.action}`);
+    P("    /**",
+      "     * Opens the run log and writes a self-describing header: the planned path,",
+      "     * the tuning that produced it, and the odometry constants in force. Six",
+      "     * months from now the file still says which path and which calibration it",
+      "     * came from, without needing the matching JSON.",
+      "     */",
+      "    private void logInit() {",
+      "        logBuffer = new StringBuilder(120000);",
+      `        logBuffer.append("# PathPilot run log\\n");`,
+      `        logBuffer.append("# opmode,${className}\\n");`,
+      `        logBuffer.append("# season,${season.name} ${season.years}\\n");`,
+      `        logBuffer.append("# alliance,${alliance}\\n");`,
+      `        logBuffer.append("# start,${startPose.x.toFixed(1)},${startPose.y.toFixed(1)},${startPose.heading}\\n");`);
+    planned.forEach(line => P(`        logBuffer.append("${line}\\n");`));
+    P(`        logBuffer.append("# motion,maxVel,").append(MAX_VELOCITY).append(",maxAccel,").append(MAX_ACCEL)`,
+      `                 .append(",turnRate,").append(TURN_RATE).append(",posTol,").append(POS_TOLERANCE)`,
+      `                 .append(",headTol,").append(HEADING_TOLERANCE).append("\\n");`,
+      `        logBuffer.append("# pid,transKp,").append(TRANS_KP).append(",transKd,").append(TRANS_KD)`,
+      `                 .append(",headKp,").append(HEAD_KP).append(",headKd,").append(HEAD_KD)`,
+      `                 .append(",minPower,").append(MIN_POWER).append(",maxPower,").append(MAX_POWER).append("\\n");`,
+      `        logBuffer.append("# odometry,parTPI,").append(PARALLEL_TICKS_PER_INCH)`,
+      `                 .append(",perpTPI,").append(PERPENDICULAR_TICKS_PER_INCH)`,
+      `                 .append(",parXOff,").append(PARALLEL_X_OFFSET)`,
+      `                 .append(",perpYOff,").append(PERPENDICULAR_Y_OFFSET)`,
+      `                 .append(",parRev,").append(PARALLEL_REVERSED)`,
+      `                 .append(",perpRev,").append(PERPENDICULAR_REVERSED).append("\\n");`,
+      `        logBuffer.append("t,leg,poseX,poseY,heading,targetX,targetY,targetHeading,")`,
+      `                 .append("posError,headError,drivePower,turnPower,parTicks,perpTicks,loopMs,event\\n");`,
+      "        runClock.reset();",
+      "        lastLoopStamp = 0;",
+      "    }",
+      "",
+      "    /** One row per control loop. Cheap — a string append, no I/O. */",
+      "    private void logRow(double tx, double ty, double th, double posError, double headError,",
+      "                        double drivePower, double turnPower, String event) {",
+      "        if (logBuffer == null || logRows >= LOG_MAX_ROWS) return;",
+      "        double now = runClock.seconds();",
+      "        double loopMs = (now - lastLoopStamp) * 1000.0;",
+      "        lastLoopStamp = now;",
+      "        logBuffer.append(String.format(Locale.US,",
+      '                "%.3f,%d,%.2f,%.2f,%.1f,%.2f,%.2f,%.1f,%.2f,%.1f,%.3f,%.3f,%d,%d,%.1f,%s%n",',
+      "                now, legIndex, poseX, poseY, poseHeading, tx, ty, th,",
+      "                posError, headError, drivePower, turnPower,",
+      "                readParallel(), readPerpendicular(), loopMs, event));",
+      "        logRows++;",
+      "    }",
+      "",
+      "    /** Writes the buffer to the Hub. Called from finish(), which always runs. */",
+      "    private void logFlush() {",
+      "        if (logBuffer == null) return;",
+      "        FileWriter out = null;",
+      "        try {",
+      "            File dir = new File(LOG_DIR);",
+      "            if (!dir.exists()) dir.mkdirs();",
+      `            String name = "${className}_" + System.currentTimeMillis() + ".csv";`,
+      "            File file = new File(dir, name);",
+      "            out = new FileWriter(file);",
+      "            out.write(logBuffer.toString());",
+      '            telemetry.addData("log", name + "  (" + logRows + " rows)");',
+      "        } catch (IOException e) {",
+      '            telemetry.addData("log FAILED", e.getMessage());',
+      "        } finally {",
+      "            if (out != null) {",
+      "                try { out.close(); } catch (IOException ignored) { }",
+      "            }",
+      "            logBuffer = null;",
+      "        }",
+      "    }",
+      "");
+  }
+
   P("    /** Stops everything and reports. Called on completion or on a failed leg. */",
     "    private void finish() {",
     "        stopDrive();");
   if (needLimelight) P("        if (limelight != null) limelight.stop();");
   P('        telemetry.addLine(aborted ? "PATH ABORTED - see the reason above" : "Path complete");',
     '        telemetry.addData("final pose", "%.1f, %.1f @ %.0f", poseX, poseY, poseHeading);',
-    '        telemetry.addData("legs completed", legIndex + (aborted ? " (last one failed)" : ""));',
-    "        telemetry.update();",
+    '        telemetry.addData("legs completed", legIndex + (aborted ? " (last one failed)" : ""));');
+  if (motion.logRuns) P("        logFlush();");
+  P("        telemetry.update();",
     "    }",
     "");
 
@@ -1565,7 +1757,12 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "        double lastPosError = Math.hypot(targetX - poseX, targetY - poseY);",
     "        double lastHeadError = wrap(targetHeadingDeg - poseHeading);",
     "        final double startPosError = lastPosError;",
-    "        boolean madeProgress = false;",
+    "        double minPosError = startPosError;",
+    "        // A leg shorter than RUNAWAY_MIN_DISTANCE is really a turn in place, and",
+    "        // the robot's centre genuinely swings a few inches while it rotates. Arming",
+    "        // the guard there aborts perfectly good legs, so short legs rely on the",
+    "        // timeout instead.",
+    "        final boolean guardArmed = startPosError >= RUNAWAY_MIN_DISTANCE;",
     "        double timeout = legTimeout(lastPosError, lastHeadError);",
     "        double posIntegral = 0, headIntegral = 0;",
     "        double lastTime = legTimer.seconds();",
@@ -1589,20 +1786,27 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "",
     "            if (posOk && headOk) {",
     "                if (!inTolerance) { inTolerance = true; settleTimer.reset(); }",
-    "                if (settleTimer.seconds() >= SETTLE_TIME) { stopDrive(); return true; }",
+    "                if (settleTimer.seconds() >= SETTLE_TIME) {",
+    ...(motion.logRuns ? ['                    logRow(targetX, targetY, targetHeadingDeg, posError, headError, 0, 0, "ARRIVED");'] : []),
+    "                    stopDrive();",
+    "                    return true;",
+    "                }",
     "            } else {",
     "                inTolerance = false;",
     "            }",
     "",
-    "            if (posError < startPosError - 1.0) madeProgress = true;",
+    "            if (posError < minPosError) minPosError = posError;",
     "",
-    "            // Only a leg that never got closer at all is a runaway. Overshooting",
-    "            // or oscillating means the pose is real and the gains need work.",
-    "            if (!madeProgress && posError > startPosError + RUNAWAY_MARGIN) {",
+    "            // Diverging from the closest approach means the pose is lying —",
+    "            // usually an inverted pod. Measuring against the best error rather",
+    "            // than the starting error means a leg that made progress and then",
+    "            // drifted is still caught, while a slow approach never trips it.",
+    "            if (guardArmed && posError > minPosError + RUNAWAY_MARGIN) {",
+    ...(motion.logRuns ? ['                logRow(targetX, targetY, targetHeadingDeg, posError, headError, 0, 0, "RUNAWAY");'] : []),
     "                stopDrive();",
     "                aborted = true;",
     '                telemetry.addLine("RUNAWAY on leg " + legIndex);',
-    '                telemetry.addData("error grew", "%.1f in -> %.1f in", startPosError, posError);',
+    '                telemetry.addData("error grew", "best %.1f in -> now %.1f in", minPosError, posError);',
     '                telemetry.addLine("The pose is moving away from the target.");',
     '                telemetry.addLine("Usually an odometry pod reading the wrong sign.");',
     "                telemetry.update();",
@@ -1610,6 +1814,7 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "            }",
     "",
     "            if (now > timeout) {",
+    ...(motion.logRuns ? ['                logRow(targetX, targetY, targetHeadingDeg, posError, headError, 0, 0, "TIMEOUT");'] : []),
     "                stopDrive();",
     "                aborted = true;",
     '                telemetry.addData("TIMEOUT leg " + legIndex, "%.1f in / %.1f deg left", posError, headError);',
@@ -1643,6 +1848,7 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "            double left = -unitX * cos + unitY * sin;",
     "",
     "            setMecanum(forward * drivePower, left * drivePower, turnPower);",
+    ...(motion.logRuns ? ['            logRow(targetX, targetY, targetHeadingDeg, posError, headError, drivePower, turnPower, "");'] : []),
     "",
     '            telemetry.addData("leg", legIndex);',
     '            telemetry.addData("pose", "%.1f, %.1f @ %.0f", poseX, poseY, poseHeading);',
@@ -1840,7 +2046,9 @@ function PathPilot() {
   const VIEW = FIELD * SCALE + MARGIN * 2;
 
   const [alliance, setAlliance] = useState("blue");
-  const [robotSize, setRobotSize] = useState(18);
+  const [robotLength, setRobotLength] = useState(18);
+  const [robotWidth, setRobotWidth] = useState(18);
+  const robotSize = Math.max(robotLength, robotWidth);
   const [motion, setMotion] = useState(DEFAULT_MOTION);
   const [startPose, setStartPose] = useState(() => {
     const p = compileSeason(BUILTIN_PACKS[0]).getPresets("blue", 18)[0];
@@ -1881,7 +2089,7 @@ function PathPilot() {
   const toField = useCallback((sx, sy) => ({ x: (sx - MARGIN) / SCALE, y: FIELD - (sy - MARGIN) / SCALE }), [SCALE, FIELD]);
   const polyStr = (pts) => pts.map(([x, y]) => { const p = toSvg(x, y); return `${p.x},${p.y}`; }).join(" ");
 
-  const presets = season.getPresets(alliance, robotSize);
+  const presets = season.getPresets(alliance, robotSize, robotLength, robotWidth);
   const setM = (k, v) => setMotion(m => ({ ...m, [k]: v }));
 
   /* ---- season switching ---- */
@@ -1892,7 +2100,7 @@ function PathPilot() {
   };
   const commitSeason = (id) => {
     const s = packs.find(p => p.id === id);
-    const p = s.getPresets(alliance, robotSize)[0];
+    const p = s.getPresets(alliance, robotSize, robotLength, robotWidth)[0];
     setSeasonId(id); setWaypoints([]); setStartPreset(p.id);
     setStartPose({ x: p.x, y: p.y, heading: p.heading });
     setSelection({ type: "start" }); setPendingSeason(null); setNotice(null);
@@ -1900,9 +2108,9 @@ function PathPilot() {
 
   useEffect(() => {
     if (startPreset === "custom") return;
-    const p = season.getPresets(alliance, robotSize).find(pp => pp.id === startPreset);
+    const p = season.getPresets(alliance, robotSize, robotLength, robotWidth).find(pp => pp.id === startPreset);
     if (p && p.x !== null) setStartPose(sp => ({ ...sp, x: p.x, y: p.y }));
-  }, [robotSize, alliance, startPreset, season]);
+  }, [robotSize, robotLength, robotWidth, alliance, startPreset, season]);
 
   /* ---- pointer ---- */
   const svgCoords = (e) => {
@@ -1974,7 +2182,7 @@ function PathPilot() {
   const switchAlliance = () => {
     const next = opponent; setAlliance(next);
     if (startPreset !== "custom") {
-      const p = season.getPresets(next, robotSize).find(pp => pp.id === startPreset);
+      const p = season.getPresets(next, robotSize, robotLength, robotWidth).find(pp => pp.id === startPreset);
       if (p && p.x !== null) setStartPose({ x: p.x, y: p.y, heading: p.heading });
     }
   };
@@ -1990,23 +2198,37 @@ function PathPilot() {
   };
 
   /* ---- validation ---- */
-  const startIssues = season.validateStart(startPose, { alliance, robotSize });
+  const startIssues = season.validateStart(startPose, { alliance, robotSize, robotLength, robotWidth });
   const startLegal = startIssues.length === 0;
+
+  const bodyAt = (x, y, h) => shrinkPoly(robotCorners(x, y, h, robotLength, robotWidth), 1);
 
   const wpBlocked = {};
   waypoints.forEach(wp => {
+    const body = bodyAt(wp.x, wp.y, wp.heading);
     for (const o of season.obstacles)
-      if (circleHitsPoly(wp.x, wp.y, robotSize / 2 - 1, o.poly)) { wpBlocked[wp.id] = o.name; break; }
+      if (polysOverlap(body, o.poly)) { wpBlocked[wp.id] = o.name; break; }
   });
 
   // Swept-path check: a leg can pass through a structure with both ends clear.
+  // Sweep the oriented rectangle along the leg, interpolating heading too, so a
+  // robot that clears a structure square-on but clips it mid-turn is caught.
   const legBlocked = {};
   {
     const chain = [startPose, ...waypoints];
     for (let i = 1; i < chain.length; i++) {
       const a = chain[i - 1], b = chain[i];
-      for (const o of season.obstacles) {
-        if (sweepHitsPoly(a.x, a.y, b.x, b.y, robotSize / 2 - 1, o.poly)) { legBlocked[chain[i].id] = o.name; break; }
+      const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      const turn = Math.abs(((b.heading - a.heading + 540) % 360) - 180);
+      const steps = Math.max(2, Math.ceil(Math.max(dist, turn / 5)));
+      outer:
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const h = a.heading + (((b.heading - a.heading + 540) % 360) - 180) * t;
+        const body = bodyAt(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, h);
+        for (const o of season.obstacles) {
+          if (polysOverlap(body, o.poly)) { legBlocked[chain[i].id] = o.name; break outer; }
+        }
       }
     }
   }
@@ -2036,7 +2258,7 @@ function PathPilot() {
   };
   const pathPayload = () => ({
     app: "PathPilot", formatVersion: 2, seasonId: season.id, seasonName: `${season.name} ${season.years}`,
-    alliance, robotSize, motion, startPose, startPreset,
+    alliance, robotSize, robotLength, robotWidth, motion, startPose, startPreset,
     waypoints: waypoints.map(({ id, ...r }) => r), exportedAt: new Date().toISOString(),
   });
   const exportPath = () => openExport("Save path", `pathpilot-${season.id}-${alliance}.json`, pathPayload());
@@ -2049,7 +2271,9 @@ function PathPilot() {
         if (d.app !== "PathPilot") return setNotice({ bad: true, msg: "Not a PathPilot path file." });
         if (!packs.some(p => p.id === d.seasonId)) return setNotice({ bad: true, msg: `No season "${d.seasonId}" loaded. Import that season pack first.` });
         if (d.seasonId !== seasonId) return setNotice({ bad: true, msg: `That path is for ${d.seasonName}. Switch to that season before loading it.` });
-        setAlliance(d.alliance || "blue"); setRobotSize(d.robotSize || 18);
+        setAlliance(d.alliance || "blue");
+        setRobotLength(d.robotLength || d.robotSize || 18);
+        setRobotWidth(d.robotWidth || d.robotSize || 18);
         if (d.motion) setMotion({ ...DEFAULT_MOTION, ...d.motion });
         setStartPreset(d.startPreset || "custom"); setStartPose(d.startPose);
         setWaypoints((d.waypoints || []).map(w => ({ ...w, id: nextId() })));
@@ -2067,7 +2291,8 @@ function PathPilot() {
         }
         setProfile(p);
         if (p.chassis && p.chassis.widthIn && p.chassis.lengthIn) {
-          setRobotSize(Math.round(Math.max(p.chassis.widthIn, p.chassis.lengthIn)));
+          setRobotLength(p.chassis.lengthIn);
+          setRobotWidth(p.chassis.widthIn);
         }
         const n = (p.macros || []).length;
         const noJava = (p.macros || []).some(m => !m.java);
@@ -2235,7 +2460,10 @@ function PathPilot() {
     const sp = toSvg(startPose.x, startPose.y); const sSel = selection.type === "start";
     out.push(
       <g key="start" style={{ cursor: "grab" }} onMouseDown={(e) => handlePointMouseDown(e, { type: "start" }, startPose.x, startPose.y)} onClick={(e) => e.stopPropagation()}>
-        <circle cx={sp.x} cy={sp.y} r={robotSize / 2 * SCALE} fill={startLegal ? "rgba(245,158,11,0.10)" : "rgba(239,68,68,0.18)"} stroke={startLegal ? (sSel ? "#F59E0B" : "#92400E") : "#EF4444"} strokeWidth="1.6" strokeDasharray="4,4" />
+        <polygon points={polyStr(robotCorners(startPose.x, startPose.y, startPose.heading, robotLength, robotWidth))}
+                 fill={startLegal ? "rgba(245,158,11,0.10)" : "rgba(239,68,68,0.18)"}
+                 stroke={startLegal ? (sSel ? "#F59E0B" : "#92400E") : "#EF4444"}
+                 strokeWidth="1.6" strokeDasharray="4,4" />
         {headingLine(sp, startPose.heading, "#F59E0B", 24)}
         <rect x={sp.x - 14} y={sp.y - 14} width={28} height={28} rx="6" fill={sSel ? "#F59E0B" : "#B45309"} stroke={sSel ? "#FCD34D" : "#78350F"} strokeWidth="2.5" />
         <text x={sp.x} y={sp.y} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="13" fontWeight="bold" style={{ pointerEvents: "none" }}>S</text>
@@ -2248,7 +2476,10 @@ function PathPilot() {
       const act = season.actions.find(a => a.id === wp.action);
       out.push(
         <g key={wp.id} style={{ cursor: "grab" }} onMouseDown={(e) => handlePointMouseDown(e, { type: "wp", id: wp.id }, wp.x, wp.y)} onClick={(e) => e.stopPropagation()}>
-          <circle cx={p.x} cy={p.y} r={robotSize / 2 * SCALE} fill={bad ? "rgba(239,68,68,0.18)" : (sel ? "rgba(16,185,129,0.10)" : "transparent")} stroke={bad ? "#EF4444" : (sel ? "#10B981" : "#6B7280")} strokeWidth={bad ? 1.6 : 1} strokeDasharray="4,4" opacity="0.7" />
+          <polygon points={polyStr(robotCorners(wp.x, wp.y, wp.heading, robotLength, robotWidth))}
+                   fill={bad ? "rgba(239,68,68,0.18)" : (sel ? "rgba(16,185,129,0.10)" : "transparent")}
+                   stroke={bad ? "#EF4444" : (sel ? "#10B981" : "#6B7280")}
+                   strokeWidth={bad ? 1.6 : 1} strokeDasharray="4,4" opacity="0.7" />
           {headingLine(p, wp.heading, sel ? "#10B981" : "#9CA3AF", 20)}
           <circle cx={p.x} cy={p.y} r={sel ? 13 : 11} fill={bad ? "#B91C1C" : (legBad ? "#7C2D12" : (sel ? "#10B981" : "#374151"))} stroke={sel ? "#065F46" : "#6B7280"} strokeWidth="2.5" />
           <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="11" fontWeight="bold" style={{ pointerEvents: "none" }}>{i + 1}</text>
@@ -2554,10 +2785,15 @@ function PathPilot() {
                     <input type="checkbox" checked={val} onChange={(e) => set(e.target.checked)} /> {lbl}
                   </label>
                 ))}
-                <label style={{ ...LB, marginTop: "6px" }}>Robot size</label>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <input type="range" min="12" max="18" value={robotSize} onChange={(e) => setRobotSize(Number(e.target.value))} style={{ flex: 1 }} />
-                  <span style={{ fontSize: "12px", minWidth: "30px" }}>{robotSize}"</span>
+                <label style={{ ...LB, marginTop: "6px" }}>Robot footprint</label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <NumField label="Length (in)" value={robotLength} step={0.5} min={4} onChange={(v) => setRobotLength(v)} />
+                  <NumField label="Width (in)" value={robotWidth} step={0.5} min={4} onChange={(v) => setRobotWidth(v)} />
+                </div>
+                <div style={{ fontSize: "11px", color: "#71717a", marginTop: "6px", lineHeight: 1.5 }}>
+                  Drawn and checked as a rotated rectangle: {(Math.hypot(robotLength, robotWidth) / 2).toFixed(1)}" to a
+                  corner, {(Math.max(robotLength, robotWidth) / 2).toFixed(1)}" to a face — so clearance depends on heading.
+                  {profile ? " Taken from the loaded profile." : ""}
                 </div>
               </div>
 
@@ -2667,7 +2903,7 @@ function PathPilot() {
                   <NumField label="Position tolerance" value={motion.posTolerance} step={0.1} min={0.1} suffix="in" onChange={(v) => setM("posTolerance", v)} />
                   <NumField label="Heading tolerance" value={motion.headingTolerance} step={0.5} min={0.1} suffix="°" onChange={(v) => setM("headingTolerance", v)} />
                   <NumField label="Runaway margin" value={motion.runawayMargin} step={1} min={1} suffix="in" onChange={(v) => setM("runawayMargin", v)} />
-                  <div />
+                  <NumField label="Guard min leg" value={motion.runawayMinDistance} step={1} min={0} suffix="in" onChange={(v) => setM("runawayMinDistance", v)} />
                   <NumField label="Timeout base" value={motion.timeoutBase} step={0.25} min={0} suffix="s" onChange={(v) => setM("timeoutBase", v)} />
                   <NumField label="Timeout factor" value={motion.timeoutFactor} step={0.25} min={1} suffix="x" onChange={(v) => setM("timeoutFactor", v)} />
                   <NumField label="Min power" value={motion.minPower} step={0.01} min={0} max={1} onChange={(v) => setM("minPower", v)} />
@@ -2720,6 +2956,21 @@ function PathPilot() {
                     <span>Total</span><strong>{timing.total.toFixed(1)}s{budget ? ` / ${budget}s` : ""}</strong>
                   </div>
                 </div>
+              </div>
+
+              <div style={CARD}>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "8px", fontSize: "13px", cursor: "pointer" }}>
+                  <input type="checkbox" checked={motion.logRuns} onChange={(e) => setM("logRuns", e.target.checked)} style={{ marginTop: "2px" }} />
+                  <span>
+                    Log every run to the Control Hub
+                    <span style={{ display: "block", fontSize: "11px", color: "#a1a1aa", marginTop: "3px", lineHeight: 1.6 }}>
+                      Writes a CSV to <code>/sdcard/FIRST/pathpilot/</code> — one row per control loop, with the planned
+                      path and the constants used in the header. Download it from the Robot Controller's Manage page,
+                      the same place you paste code. Buffered in memory and written once at the end, so it does not
+                      slow the loop.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               <button onClick={() => setMotion(DEFAULT_MOTION)} style={BTN}>↺ Reset to defaults</button>
