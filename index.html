@@ -1353,9 +1353,9 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "import com.qualcomm.robotcore.hardware.IMU;");
   if (macroServos.size || macroBlinkin) P("import com.qualcomm.robotcore.hardware.Servo;");
   if (motion.logRuns) {
-    P("import java.io.File;",
-      "import java.io.FileWriter;",
-      "import java.io.IOException;",
+    // RobotLog writes into the Robot Controller log, which is the only thing the
+    // Manage page will hand back. A CSV on /sdcard is unreachable without ADB.
+    P("import com.qualcomm.robotcore.util.RobotLog;",
       "import java.util.Locale;");
   }
   P("import com.qualcomm.robotcore.util.ElapsedTime;",
@@ -1479,13 +1479,14 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "");
 
   if (motion.logRuns) {
-    P("    /* Run log. Buffered in memory and written once at the end — writing to",
-      "     * storage inside the control loop would stall it. ~1500 rows for a 30s",
-      "     * run at 50Hz, so memory is not a concern, but the cap stops a runaway",
-      "     * loop from exhausting it. */",
-      "    private static final String LOG_DIR = \"/sdcard/FIRST/pathpilot\";",
-      "    private static final int LOG_MAX_ROWS = 20000;",
+    P("    /* Run log. Every line goes to RobotLog with a PathPilot tag, so it lands",
+      "     * in the Robot Controller log you download from the Manage page. Buffered",
+      "     * in memory and emitted at the end — writing inside the control loop would",
+      "     * stall it. The cap stops a runaway loop exhausting memory. */",
+      "    private static final String LOG_TAG = \"PathPilot\";",
+      "    private static final int LOG_MAX_ROWS = 4000;",
       "    private StringBuilder logBuffer;",
+      "    private String runId;",
       "    private int logRows = 0;",
       "    private final ElapsedTime runClock = new ElapsedTime();",
       "    private double lastLoopStamp = 0;",
@@ -1528,72 +1529,71 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
 
   if (motion.logRuns) {
     const planned = waypoints.map((wp, i) =>
-      `# waypoint,${i + 1},${wp.x.toFixed(1)},${wp.y.toFixed(1)},${wp.heading},${wp.action}`);
+      `PLAN,${i + 1},${wp.x.toFixed(1)},${wp.y.toFixed(1)},${wp.heading},${wp.action}`);
     P("    /**",
-      "     * Opens the run log and writes a self-describing header: the planned path,",
-      "     * the tuning that produced it, and the odometry constants in force. Six",
-      "     * months from now the file still says which path and which calibration it",
-      "     * came from, without needing the matching JSON.",
+      "     * Opens the run log. Every line carries a run id so several autos in one",
+      "     * downloaded log stay separable, and a header block describing the planned",
+      "     * path, the tuning, and the odometry constants in force — so the log is",
+      "     * self-describing without the matching JSON.",
       "     */",
       "    private void logInit() {",
-      "        logBuffer = new StringBuilder(120000);",
-      `        logBuffer.append("# PathPilot run log\\n");`,
-      `        logBuffer.append("# opmode,${className}\\n");`,
-      `        logBuffer.append("# season,${season.name} ${season.years}\\n");`,
-      `        logBuffer.append("# alliance,${alliance}\\n");`,
-      `        logBuffer.append("# start,${startPose.x.toFixed(1)},${startPose.y.toFixed(1)},${startPose.heading}\\n");`);
-    planned.forEach(line => P(`        logBuffer.append("${line}\\n");`));
-    P(`        logBuffer.append("# motion,maxVel,").append(MAX_VELOCITY).append(",maxAccel,").append(MAX_ACCEL)`,
-      `                 .append(",turnRate,").append(TURN_RATE).append(",posTol,").append(POS_TOLERANCE)`,
-      `                 .append(",headTol,").append(HEADING_TOLERANCE).append("\\n");`,
-      `        logBuffer.append("# pid,transKp,").append(TRANS_KP).append(",transKd,").append(TRANS_KD)`,
-      `                 .append(",headKp,").append(HEAD_KP).append(",headKd,").append(HEAD_KD)`,
-      `                 .append(",minPower,").append(MIN_POWER).append(",maxPower,").append(MAX_POWER).append("\\n");`,
-      `        logBuffer.append("# odometry,parTPI,").append(PARALLEL_TICKS_PER_INCH)`,
-      `                 .append(",perpTPI,").append(PERPENDICULAR_TICKS_PER_INCH)`,
-      `                 .append(",parXOff,").append(PARALLEL_X_OFFSET)`,
-      `                 .append(",perpYOff,").append(PERPENDICULAR_Y_OFFSET)`,
-      `                 .append(",parRev,").append(PARALLEL_REVERSED)`,
-      `                 .append(",perpRev,").append(PERPENDICULAR_REVERSED).append("\\n");`,
-      `        logBuffer.append("t,leg,poseX,poseY,heading,targetX,targetY,targetHeading,")`,
-      `                 .append("posError,headError,drivePower,turnPower,parTicks,perpTicks,loopMs,event\\n");`,
+      "        logBuffer = new StringBuilder(160000);",
+      "        runId = Long.toString(System.currentTimeMillis());",
+      `        line("BEGIN,${className},${season.name} ${season.years},${alliance}");`,
+      `        line(String.format(Locale.US, "START,%.1f,%.1f,%.0f", START_X, START_Y, START_HEADING));`);
+    planned.forEach(p => P(`        line("${p}");`));
+    P('        line(String.format(Locale.US, "MOTION,%.1f,%.1f,%.1f,%.2f,%.1f",',
+      "                MAX_VELOCITY, MAX_ACCEL, TURN_RATE, POS_TOLERANCE, HEADING_TOLERANCE));",
+      '        line(String.format(Locale.US, "PID,%.4f,%.4f,%.4f,%.4f,%.2f,%.2f",',
+      "                TRANS_KP, TRANS_KD, HEAD_KP, HEAD_KD, MIN_POWER, MAX_POWER));",
+      '        line(String.format(Locale.US, "ODO,%.2f,%.2f,%.3f,%.3f,%b,%b",',
+      "                PARALLEL_TICKS_PER_INCH, PERPENDICULAR_TICKS_PER_INCH,",
+      "                PARALLEL_X_OFFSET, PERPENDICULAR_Y_OFFSET,",
+      "                PARALLEL_REVERSED, PERPENDICULAR_REVERSED));",
+      '        line("COLS,t,leg,poseX,poseY,heading,targetX,targetY,targetHeading,'
+        + 'posError,headError,drivePower,turnPower,parTicks,perpTicks,loopMs,event");',
       "        runClock.reset();",
       "        lastLoopStamp = 0;",
       "    }",
       "",
-      "    /** One row per control loop. Cheap — a string append, no I/O. */",
-      "    private void logRow(double tx, double ty, double th, double posError, double headError,",
-      "                        double drivePower, double turnPower, String event) {",
+      "    /** Buffers one tagged line. No I/O — that happens once, at the end. */",
+      "    private void line(String body) {",
       "        if (logBuffer == null || logRows >= LOG_MAX_ROWS) return;",
-      "        double now = runClock.seconds();",
-      "        double loopMs = (now - lastLoopStamp) * 1000.0;",
-      "        lastLoopStamp = now;",
-      "        logBuffer.append(String.format(Locale.US,",
-      '                "%.3f,%d,%.2f,%.2f,%.1f,%.2f,%.2f,%.1f,%.2f,%.1f,%.3f,%.3f,%d,%d,%.1f,%s%n",',
-      "                now, legIndex, poseX, poseY, poseHeading, tx, ty, th,",
-      "                posError, headError, drivePower, turnPower,",
-      "                readParallel(), readPerpendicular(), loopMs, event));",
+      "        logBuffer.append(runId).append(',').append(body).append('\\n');",
       "        logRows++;",
       "    }",
       "",
-      "    /** Writes the buffer to the Hub. Called from finish(), which always runs. */",
+      "    /** One row per control loop. Cheap — a string append. */",
+      "    private void logRow(double tx, double ty, double th, double posError, double headError,",
+      "                        double drivePower, double turnPower, String event) {",
+      "        if (logBuffer == null) return;",
+      "        double now = runClock.seconds();",
+      "        double loopMs = (now - lastLoopStamp) * 1000.0;",
+      "        lastLoopStamp = now;",
+      "        line(String.format(Locale.US,",
+      '                "D,%.3f,%d,%.2f,%.2f,%.1f,%.2f,%.2f,%.1f,%.2f,%.1f,%.3f,%.3f,%d,%d,%.1f,%s",',
+      "                now, legIndex, poseX, poseY, poseHeading, tx, ty, th,",
+      "                posError, headError, drivePower, turnPower,",
+      "                readParallel(), readPerpendicular(), loopMs, event));",
+      "    }",
+      "",
+      "    /**",
+      "     * Emits the buffer to RobotLog. Split into chunks because very long single",
+      "     * lines get truncated by the Android logger.",
+      "     */",
       "    private void logFlush() {",
       "        if (logBuffer == null) return;",
-      "        FileWriter out = null;",
       "        try {",
-      "            File dir = new File(LOG_DIR);",
-      "            if (!dir.exists()) dir.mkdirs();",
-      `            String name = "${className}_" + System.currentTimeMillis() + ".csv";`,
-      "            File file = new File(dir, name);",
-      "            out = new FileWriter(file);",
-      "            out.write(logBuffer.toString());",
-      '            telemetry.addData("log", name + "  (" + logRows + " rows)");',
-      "        } catch (IOException e) {",
+      '            line("END," + logRows);',
+      "            String[] all = logBuffer.toString().split(\"\\n\");",
+      "            for (String s : all) {",
+      "                if (s.length() > 0) RobotLog.aa(LOG_TAG, s);",
+      "            }",
+      '            telemetry.addData("log", logRows + " rows, run " + runId);',
+      '            telemetry.addLine("Download Logs from the Manage page, then load it in PathPilot.");',
+      "        } catch (Exception e) {",
       '            telemetry.addData("log FAILED", e.getMessage());',
       "        } finally {",
-      "            if (out != null) {",
-      "                try { out.close(); } catch (IOException ignored) { }",
-      "            }",
       "            logBuffer = null;",
       "        }",
       "    }",
@@ -2010,6 +2010,106 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   return L.join("\n");
 }
 
+/* ============================================================================
+ * Run log parsing.
+ *
+ * The Robot Controller log is one long file covering the whole life of the hub,
+ * so PathPilot's lines have to be picked out of Android noise. Every line the
+ * generated OpMode emits is tagged "PathPilot:" and prefixed with a run id, so
+ * several autos in one download stay separable.
+ * ==========================================================================*/
+
+const LOG_LINE = /\bPathPilot:\s*(\d+),(.*)$/;
+
+function parseRunLog(text) {
+  const runs = new Map();
+  const lines = String(text).split(/\r?\n/);
+  let matched = 0;
+
+  for (const raw of lines) {
+    const m = raw.match(LOG_LINE);
+    if (!m) continue;
+    matched++;
+    const [, runId, body] = m;
+    if (!runs.has(runId)) {
+      runs.set(runId, {
+        runId, opMode: "", season: "", alliance: "",
+        start: null, planned: [], motion: null, pid: null, odometry: null,
+        rows: [], outcomes: [], rowCount: null,
+      });
+    }
+    const run = runs.get(runId);
+    const f = body.split(",");
+    switch (f[0]) {
+      case "BEGIN":
+        run.opMode = f[1] || ""; run.season = f[2] || ""; run.alliance = f[3] || "";
+        break;
+      case "START":
+        run.start = { x: +f[1], y: +f[2], heading: +f[3] };
+        break;
+      case "PLAN":
+        run.planned.push({ index: +f[1], x: +f[2], y: +f[3], heading: +f[4], action: f[5] || "none" });
+        break;
+      case "MOTION":
+        run.motion = { maxVelocity: +f[1], maxAccel: +f[2], turnRate: +f[3], posTolerance: +f[4], headingTolerance: +f[5] };
+        break;
+      case "PID":
+        run.pid = { transP: +f[1], transD: +f[2], headP: +f[3], headD: +f[4], minPower: +f[5], maxPower: +f[6] };
+        break;
+      case "ODO":
+        run.odometry = {
+          parallelTPI: +f[1], perpTPI: +f[2], parallelXOffset: +f[3], perpYOffset: +f[4],
+          parallelReversed: f[5] === "true", perpReversed: f[6] === "true",
+        };
+        break;
+      case "D": {
+        const row = {
+          t: +f[1], leg: +f[2], x: +f[3], y: +f[4], heading: +f[5],
+          targetX: +f[6], targetY: +f[7], targetHeading: +f[8],
+          posError: +f[9], headError: +f[10],
+          drivePower: +f[11], turnPower: +f[12],
+          parTicks: +f[13], perpTicks: +f[14], loopMs: +f[15],
+          event: (f[16] || "").trim(),
+        };
+        run.rows.push(row);
+        if (row.event) run.outcomes.push({ leg: row.leg, event: row.event, t: row.t, posError: row.posError, headError: row.headError });
+        break;
+      }
+      case "END":
+        run.rowCount = +f[1];
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Newest first — after a session you almost always want the last run.
+  const list = Array.from(runs.values()).sort((a, b) => Number(b.runId) - Number(a.runId));
+  list.forEach(run => {
+    run.duration = run.rows.length ? run.rows[run.rows.length - 1].t : 0;
+    run.legCount = run.rows.reduce((n, r) => Math.max(n, r.leg), 0);
+    run.aborted = run.outcomes.some(o => o.event === "TIMEOUT" || o.event === "RUNAWAY");
+    const loops = run.rows.map(r => r.loopMs).filter(v => v > 0 && v < 1000);
+    run.loopAvg = loops.length ? loops.reduce((a, b) => a + b, 0) / loops.length : 0;
+    run.loopMax = loops.length ? Math.max(...loops) : 0;
+    // Worst distance from the straight line between consecutive planned points.
+    run.maxDeviation = 0;
+    run.rows.forEach(r => {
+      const d = Math.hypot(r.x - r.targetX, r.y - r.targetY);
+      if (r.event === "ARRIVED") run.maxDeviation = Math.max(run.maxDeviation, d);
+    });
+    // Peak speed actually achieved, useful for replacing the guessed MAX_VELOCITY.
+    let peak = 0;
+    for (let i = 1; i < run.rows.length; i++) {
+      const a = run.rows[i - 1], b = run.rows[i];
+      const dt = b.t - a.t;
+      if (dt > 0.001 && dt < 0.5) peak = Math.max(peak, Math.hypot(b.x - a.x, b.y - a.y) / dt);
+    }
+    run.peakSpeed = peak;
+  });
+  return { runs: list, matched };
+}
+
 /* -------------------------------------------------------------- component */
 
 const MARGIN = 42;
@@ -2072,6 +2172,8 @@ function PathPilot() {
     return () => clearTimeout(t);
   }, [notice]);
   const [pathName, setPathName] = useState("Auto");
+  const [logRuns, setLogRuns] = useState([]);
+  const [selectedRun, setSelectedRun] = useState(null);
   const [profile, setProfile] = useState(null);
   const macros = profile && profile.macros ? profile.macros : [];
   // A season contributes tag actions; a robot without a camera cannot run them.
@@ -2315,6 +2417,23 @@ function PathPilot() {
       } catch { setNotice({ bad: true, msg: "That is not valid JSON." }); }
   };
 
+  const loadLogText = (text) => {
+    const { runs, matched } = parseRunLog(text);
+    if (!runs.length) {
+      setNotice({ bad: true, msg: matched
+        ? `Found ${matched} PathPilot lines but no complete runs — the log may be truncated.`
+        : "No PathPilot lines in that file. Check that run logging was enabled, and that you downloaded the log after the run." });
+      return;
+    }
+    setLogRuns(runs);
+    setSelectedRun(runs[0].runId);
+    setTab("log");
+    const aborted = runs.filter(r => r.aborted).length;
+    setNotice({ bad: aborted > 0,
+      msg: `Loaded ${runs.length} run${runs.length === 1 ? "" : "s"}.` +
+           (aborted ? ` ${aborted} did not finish cleanly.` : "") });
+  };
+
   const loadPackText = (text) => {
       let compiled;
       try {
@@ -2542,7 +2661,8 @@ function PathPilot() {
 
   const TABS = [
     { id: "path", label: "🗺️ Path" }, { id: "waypoints", label: "📋 Waypoints" },
-    { id: "motion", label: "🎚️ Motion" }, { id: "code", label: "💻 Code" }, { id: "field", label: "📐 Field data" },
+    { id: "motion", label: "🎚️ Motion" }, { id: "code", label: "💻 Code" },
+    { id: "log", label: "📈 Log" }, { id: "field", label: "📐 Field data" },
   ];
 
   return (
@@ -2964,10 +3084,10 @@ function PathPilot() {
                   <span>
                     Log every run to the Control Hub
                     <span style={{ display: "block", fontSize: "11px", color: "#a1a1aa", marginTop: "3px", lineHeight: 1.6 }}>
-                      Writes a CSV to <code>/sdcard/FIRST/pathpilot/</code> — one row per control loop, with the planned
-                      path and the constants used in the header. Download it from the Robot Controller's Manage page,
-                      the same place you paste code. Buffered in memory and written once at the end, so it does not
-                      slow the loop.
+                      One tagged line per control loop, with the planned path and the constants used in the header.
+                      Lines go into the Robot Controller log — hit <strong>Download Logs</strong> on the Manage page,
+                      then load that file in the Log tab. Buffered in memory and emitted once at the end, so it does
+                      not slow the loop. Each run carries its own id, so several autos in one download stay separable.
                     </span>
                   </span>
                 </label>
@@ -3013,6 +3133,180 @@ function PathPilot() {
             <pre style={{ background: "#18181b", padding: "12px", borderRadius: "8px", fontSize: "11px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", overflow: "auto", maxHeight: "460px", margin: 0, whiteSpace: "pre-wrap", color: "#d4d4d8" }}>{generateCode()}</pre>
           </div>
         )}
+
+        {tab === "log" && (() => {
+          const run = logRuns.find(r => r.runId === selectedRun) || logRuns[0];
+          if (!run) {
+            return (
+              <div style={{ ...CARD, borderRadius: "12px", padding: "24px", textAlign: "center" }}>
+                <div style={{ fontSize: "14px", marginBottom: "10px" }}>No run log loaded</div>
+                <div style={{ fontSize: "12px", color: "#a1a1aa", lineHeight: 1.7, maxWidth: "520px", margin: "0 auto 16px" }}>
+                  Run an auto with logging enabled, then on the Robot Controller's Manage page press
+                  <strong> Download Logs</strong>. Load that file here and PathPilot will pull its own lines out
+                  and draw what the robot actually did over what you planned.
+                </div>
+                <button onClick={() => openImport("Load a Robot Controller log", loadLogText)} style={BTN}>
+                  📂 Load robot log
+                </button>
+              </div>
+            );
+          }
+
+          // Actual path, drawn over the planned one on the same field.
+          const pts = run.rows.map(r => toSvg(r.x, r.y));
+          const planPts = [run.start, ...run.planned].filter(Boolean).map(p => toSvg(p.x, p.y));
+          const legColors = ["#F59E0B", "#10B981", "#38BDF8", "#A855F7", "#F472B6", "#FBBF24"];
+          const maxLoop = run.loopMax;
+          const errMax = Math.max(1, ...run.rows.map(r => r.posError));
+
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 260px", gap: "16px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={CARD}>
+                  <svg viewBox={`0 0 ${VIEW} ${VIEW}`} style={{ display: "block", width: "100%", height: "auto" }}>
+                    <rect width={VIEW} height={VIEW} fill="#1a1a1e" />
+                    {renderAreas()}
+                    <rect x={MARGIN} y={MARGIN} width={FIELD * SCALE} height={FIELD * SCALE} fill="#242428" stroke="#52525b" strokeWidth="2" />
+                    {showGrid && renderTiles()}
+                    {showZones && renderPolys()}
+                    {showZones && renderRects()}
+                    {renderTags()}
+
+                    {/* planned */}
+                    <polyline points={planPts.map(p => `${p.x},${p.y}`).join(" ")}
+                              fill="none" stroke="#52525b" strokeWidth="2" strokeDasharray="6,4" />
+                    {planPts.map((p, i) => (
+                      <g key={`pp${i}`}>
+                        <circle cx={p.x} cy={p.y} r="9" fill="#3f3f46" stroke="#71717a" strokeWidth="1.5" />
+                        <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="#d4d4d8" fontSize="9" fontWeight="700">
+                          {i === 0 ? "S" : i}
+                        </text>
+                      </g>
+                    ))}
+
+                    {/* actual, coloured by leg */}
+                    {run.rows.map((r, i) => {
+                      if (i === 0) return null;
+                      const a = pts[i - 1], b = pts[i];
+                      return <line key={`a${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                                   stroke={legColors[(r.leg - 1) % legColors.length]} strokeWidth="2.4" strokeLinecap="round" />;
+                    })}
+
+                    {/* where each leg ended */}
+                    {run.outcomes.map((o, i) => {
+                      const row = run.rows.find(r => r.leg === o.leg && r.event === o.event);
+                      if (!row) return null;
+                      const p = toSvg(row.x, row.y);
+                      const bad = o.event !== "ARRIVED";
+                      return (
+                        <g key={`o${i}`}>
+                          <circle cx={p.x} cy={p.y} r="7" fill={bad ? "#B91C1C" : "#10B981"} stroke="#18181b" strokeWidth="1.5" />
+                          <text x={p.x + 11} y={p.y - 8} fill={bad ? "#fca5a5" : "#6EE7B7"} fontSize="9" fontWeight="600">
+                            {o.event}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                  <div style={{ fontSize: "11px", color: "#71717a", marginTop: "8px", textAlign: "center" }}>
+                    Grey dashed is what you planned · colour is what the robot did, one colour per leg
+                  </div>
+                </div>
+
+                {/* error trace */}
+                <div style={CARD}>
+                  <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>
+                    Distance to target over time — a clean leg falls steadily to zero
+                  </div>
+                  <svg viewBox="0 0 700 150" style={{ display: "block", width: "100%", height: "auto" }}>
+                    <line x1="34" y1="120" x2="695" y2="120" stroke="#3f3f46" strokeWidth="1" />
+                    <line x1="34" y1="10" x2="34" y2="120" stroke="#3f3f46" strokeWidth="1" />
+                    <text x="30" y="14" textAnchor="end" fill="#71717a" fontSize="9">{errMax.toFixed(0)}"</text>
+                    <text x="30" y="122" textAnchor="end" fill="#71717a" fontSize="9">0</text>
+                    <text x="690" y="136" textAnchor="end" fill="#71717a" fontSize="9">{run.duration.toFixed(1)}s</text>
+                    {run.rows.map((r, i) => {
+                      if (i === 0) return null;
+                      const a = run.rows[i - 1];
+                      const sx = 34 + (a.t / run.duration) * 660;
+                      const ex = 34 + (r.t / run.duration) * 660;
+                      const sy = 120 - (a.posError / errMax) * 108;
+                      const ey = 120 - (r.posError / errMax) * 108;
+                      return <line key={`e${i}`} x1={sx} y1={sy} x2={ex} y2={ey}
+                                   stroke={legColors[(r.leg - 1) % legColors.length]} strokeWidth="1.8" />;
+                    })}
+                    {run.outcomes.map((o, i) => {
+                      const x = 34 + (o.t / run.duration) * 660;
+                      const bad = o.event !== "ARRIVED";
+                      return <line key={`ol${i}`} x1={x} y1="10" x2={x} y2="120"
+                                   stroke={bad ? "#B91C1C" : "#065F46"} strokeWidth="1" strokeDasharray="3,3" />;
+                    })}
+                  </svg>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={CARD}>
+                  <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Run</div>
+                  <select value={run.runId} onChange={(e) => setSelectedRun(e.target.value)} style={IN}>
+                    {logRuns.map(r => (
+                      <option key={r.runId} value={r.runId}>
+                        {r.opMode} · {r.duration.toFixed(1)}s · {r.aborted ? "aborted" : "clean"}
+                      </option>
+                    ))}
+                  </select>
+                  <button onClick={() => openImport("Load a Robot Controller log", loadLogText)}
+                          style={{ ...BTN, width: "100%", marginTop: "8px" }}>📂 Load another log</button>
+                </div>
+
+                <div style={CARD}>
+                  <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>What happened</div>
+                  <div style={{ fontSize: "12.5px", lineHeight: 1.9 }}>
+                    <div>Legs: <strong>{run.legCount}</strong> of {run.planned.length}</div>
+                    <div>Duration: <strong>{run.duration.toFixed(1)}s</strong></div>
+                    <div>Samples: <strong>{run.rows.length}</strong></div>
+                    {run.outcomes.map((o, i) => (
+                      <div key={i} style={{ color: o.event === "ARRIVED" ? "#6EE7B7" : "#fca5a5" }}>
+                        Leg {o.leg}: {o.event} at {o.posError.toFixed(2)}in / {o.headError.toFixed(1)}°
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={CARD}>
+                  <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Measured vs assumed</div>
+                  <div style={{ fontSize: "12.5px", lineHeight: 1.9 }}>
+                    <div>Peak speed: <strong>{run.peakSpeed.toFixed(1)} in/s</strong></div>
+                    {run.motion && (
+                      <div style={{ color: Math.abs(run.peakSpeed - run.motion.maxVelocity) > run.motion.maxVelocity * 0.25 ? "#FBBF24" : "#a1a1aa", fontSize: "11px" }}>
+                        MAX_VELOCITY is set to {run.motion.maxVelocity}
+                        {run.peakSpeed > run.motion.maxVelocity * 1.25 ? " — the robot is faster than the estimate, so timings run long" : ""}
+                        {run.peakSpeed < run.motion.maxVelocity * 0.75 ? " — the robot is slower than the estimate, so timings run short" : ""}
+                      </div>
+                    )}
+                    <div style={{ marginTop: "6px" }}>Loop: <strong>{run.loopAvg.toFixed(1)}ms</strong> avg, {run.loopMax.toFixed(0)}ms worst</div>
+                    <div style={{ fontSize: "11px", color: run.loopAvg > 40 ? "#FBBF24" : "#a1a1aa" }}>
+                      {run.loopAvg > 40
+                        ? "Slow loops make the PID behave differently than tuned — worth trimming telemetry."
+                        : "Fast enough for the controller to behave as tuned."}
+                    </div>
+                  </div>
+                </div>
+
+                {run.odometry && (
+                  <div style={CARD}>
+                    <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Constants used</div>
+                    <div style={{ fontSize: "11.5px", lineHeight: 1.8, fontFamily: "ui-monospace, Menlo, monospace", color: "#d4d4d8" }}>
+                      <div>par {run.odometry.parallelTPI} t/in, x {run.odometry.parallelXOffset}</div>
+                      <div>perp {run.odometry.perpTPI} t/in, y {run.odometry.perpYOffset}</div>
+                      <div>reversed {String(run.odometry.parallelReversed)} / {String(run.odometry.perpReversed)}</div>
+                      {run.pid && <div style={{ marginTop: "4px" }}>kP {run.pid.transP} / {run.pid.headP}</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {tab === "field" && (
           <div style={{ ...CARD, borderRadius: "12px", padding: "16px", fontSize: "13px", lineHeight: 1.8 }}>
