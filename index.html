@@ -1507,6 +1507,7 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "",
     "        waitForStart();",
     "        if (isStopRequested()) return;",
+    ...(motion.logRuns ? ["        logStart();"] : []),
     "");
   if (needLimelight) P("        if (limelight != null) limelight.start();", "");
 
@@ -1552,6 +1553,11 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "                PARALLEL_REVERSED, PERPENDICULAR_REVERSED));",
       '        line("COLS,t,leg,poseX,poseY,heading,targetX,targetY,targetHeading,'
         + 'posError,headError,drivePower,turnPower,parTicks,perpTicks,loopMs,event");',
+      "    }",
+      "",
+      "    /** Starts the clock. Called after waitForStart, so the first interval is a",
+      "     * control loop and not however long the robot sat on the ready screen. */",
+      "    private void logStart() {",
       "        runClock.reset();",
       "        lastLoopStamp = 0;",
       "    }",
@@ -1586,8 +1592,16 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "        try {",
       '            line("END," + logRows);',
       "            String[] all = logBuffer.toString().split(\"\\n\");",
-      "            for (String s : all) {",
-      "                if (s.length() > 0) RobotLog.aa(LOG_TAG, s);",
+      "            // Android throttles a process that floods the log, silently dropping",
+      "            // lines. Pausing every few dozen keeps the whole run intact.",
+      "            for (int i = 0; i < all.length; i++) {",
+      "                if (all[i].length() > 0) RobotLog.aa(LOG_TAG, all[i]);",
+      "                if ((i % 40) == 39) {",
+      "                    try { Thread.sleep(12); } catch (InterruptedException ie) {",
+      "                        Thread.currentThread().interrupt();",
+      "                        break;",
+      "                    }",
+      "                }",
       "            }",
       '            telemetry.addData("log", logRows + " rows, run " + runId);',
       '            telemetry.addLine("Download Logs from the Manage page, then load it in PathPilot.");',
@@ -2089,9 +2103,15 @@ function parseRunLog(text) {
     run.duration = run.rows.length ? run.rows[run.rows.length - 1].t : 0;
     run.legCount = run.rows.reduce((n, r) => Math.max(n, r.leg), 0);
     run.aborted = run.outcomes.some(o => o.event === "TIMEOUT" || o.event === "RUNAWAY");
-    const loops = run.rows.map(r => r.loopMs).filter(v => v > 0 && v < 1000);
+    // The first sample's interval spans from logStart to the first control loop,
+    // which is not a loop time. Drop it rather than reporting it as a stall.
+    const loops = run.rows.slice(1).map(r => r.loopMs).filter(v => v > 0);
+    const sorted = [...loops].sort((a, b) => a - b);
     run.loopAvg = loops.length ? loops.reduce((a, b) => a + b, 0) / loops.length : 0;
-    run.loopMax = loops.length ? Math.max(...loops) : 0;
+    run.loopMedian = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+    run.loop95 = sorted.length ? sorted[Math.floor(sorted.length * 0.95)] : 0;
+    run.loopMax = sorted.length ? sorted[sorted.length - 1] : 0;
+    run.loopStalls = loops.filter(v => v > 100).length;
     // Worst distance from the straight line between consecutive planned points.
     run.maxDeviation = 0;
     run.rows.forEach(r => {
@@ -2659,6 +2679,39 @@ function PathPilot() {
     });
   };
 
+  /** Heading picker: drag the slider or type a value. Out-of-range entries wrap
+   *  rather than being rejected, so typing 400 gives 40 and -90 gives 270. */
+  const HeadingField = ({ value, onChange }) => {
+    const [draft, setDraft] = useState(null);
+    const commit = (raw) => {
+      setDraft(null);
+      const n = parseFloat(raw);
+      if (Number.isNaN(n)) return;
+      onChange(((Math.round(n) % 360) + 360) % 360);
+    };
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <input type="range" min="0" max="359" value={value}
+               onChange={(e) => onChange(Number(e.target.value))} style={{ flex: 1 }} />
+        <input
+          type="text" inputMode="numeric"
+          value={draft !== null ? draft : value}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={(e) => commit(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { commit(e.target.value); e.target.blur(); }
+            if (e.key === "Escape") { setDraft(null); e.target.blur(); }
+            if (e.key === "ArrowUp") { e.preventDefault(); onChange((value + 1) % 360); }
+            if (e.key === "ArrowDown") { e.preventDefault(); onChange((value + 359) % 360); }
+          }}
+          onFocus={(e) => e.target.select()}
+          style={{ ...IN, width: "62px", textAlign: "right", padding: "4px 6px" }}
+        />
+        <span style={{ fontSize: "12px", color: "#a1a1aa" }}>°</span>
+      </div>
+    );
+  };
+
   const TABS = [
     { id: "path", label: "🗺️ Path" }, { id: "waypoints", label: "📋 Waypoints" },
     { id: "motion", label: "🎚️ Motion" }, { id: "code", label: "💻 Code" },
@@ -2756,7 +2809,7 @@ function PathPilot() {
                   <div style={{ display: "flex", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
                     <label style={{ ...BTN, display: "inline-block" }}>
                       📁 Choose file
-                      <input type="file" accept="application/json,.json" style={{ display: "none" }}
+                      <input type="file" accept=".json,.txt,.log,.csv,text/plain,application/json" style={{ display: "none" }}
                              onChange={(e) => {
                                const f = e.target.files && e.target.files[0];
                                if (!f) return;
@@ -2853,10 +2906,7 @@ function PathPilot() {
                   <NumField label="Y (in)" value={startPose.y} step={0.5} onChange={(v) => updateStart("y", clamp(v))} />
                 </div>
                 <label style={LB}>Heading (0 = away from audience)</label>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <input type="range" min="0" max="359" value={startPose.heading} onChange={(e) => updateStart("heading", Number(e.target.value))} style={{ flex: 1 }} />
-                  <span style={{ fontSize: "12px", minWidth: "34px" }}>{startPose.heading}°</span>
-                </div>
+                <HeadingField value={startPose.heading} onChange={(v) => updateStart("heading", v)} />
               </div>
 
               {selectedWp && (
@@ -2875,9 +2925,8 @@ function PathPilot() {
                     <NumField label="Y (in)" value={selectedWp.y} step={0.5} onChange={(v) => updateWaypoint(selectedWp.id, "y", clamp(v))} />
                   </div>
                   <label style={LB}>Heading (°)</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-                    <input type="range" min="0" max="359" value={selectedWp.heading} onChange={(e) => updateWaypoint(selectedWp.id, "heading", Number(e.target.value))} style={{ flex: 1 }} />
-                    <span style={{ fontSize: "12px", minWidth: "34px" }}>{selectedWp.heading}°</span>
+                  <div style={{ marginBottom: "10px" }}>
+                    <HeadingField value={selectedWp.heading} onChange={(v) => updateWaypoint(selectedWp.id, "heading", v)} />
                   </div>
                   <div style={{ marginBottom: "10px" }}>
                     <label style={LB}>Action</label>
@@ -3283,11 +3332,15 @@ function PathPilot() {
                         {run.peakSpeed < run.motion.maxVelocity * 0.75 ? " — the robot is slower than the estimate, so timings run short" : ""}
                       </div>
                     )}
-                    <div style={{ marginTop: "6px" }}>Loop: <strong>{run.loopAvg.toFixed(1)}ms</strong> avg, {run.loopMax.toFixed(0)}ms worst</div>
-                    <div style={{ fontSize: "11px", color: run.loopAvg > 40 ? "#FBBF24" : "#a1a1aa" }}>
-                      {run.loopAvg > 40
-                        ? "Slow loops make the PID behave differently than tuned — worth trimming telemetry."
-                        : "Fast enough for the controller to behave as tuned."}
+                    <div style={{ marginTop: "6px" }}>
+                      Loop: <strong>{run.loopMedian.toFixed(1)}ms</strong> median, {run.loop95.toFixed(0)}ms at 95th, {run.loopMax.toFixed(0)}ms worst
+                    </div>
+                    <div style={{ fontSize: "11px", color: (run.loop95 > 40 || run.loopStalls > 0) ? "#FBBF24" : "#a1a1aa" }}>
+                      {run.loopStalls > 0
+                        ? `${run.loopStalls} loop${run.loopStalls === 1 ? "" : "s"} over 100ms — at ${run.peakSpeed.toFixed(0)} in/s that is ${(run.peakSpeed * 0.1).toFixed(0)}in of travel with no correction.`
+                        : run.loop95 > 40
+                          ? "The slowest loops are long enough to change how the PID behaves — worth trimming telemetry."
+                          : "Fast enough throughout for the controller to behave as tuned."}
                     </div>
                   </div>
                 </div>
