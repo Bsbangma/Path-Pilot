@@ -2130,6 +2130,47 @@ function parseRunLog(text) {
   return { runs: list, matched };
 }
 
+/**
+ * Heading picker: drag the slider or type a value.
+ *
+ * Defined at module scope on purpose. A component declared inside render is a
+ * new type on every render, so React unmounts and remounts it — which drops the
+ * drag mid-gesture and made the slider unusable past a degree or two.
+ *
+ * Out-of-range entries wrap rather than being rejected, so 513 gives 153 and
+ * -90 gives 270.
+ */
+function HeadingField({ value, onChange, IN }) {
+  const [draft, setDraft] = React.useState(null);
+  const commit = (raw) => {
+    setDraft(null);
+    const n = parseFloat(raw);
+    if (Number.isNaN(n)) return;
+    onChange(((Math.round(n) % 360) + 360) % 360);
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <input type="range" min="0" max="359" value={value}
+             onChange={(e) => onChange(Number(e.target.value))} style={{ flex: 1 }} />
+      <input
+        type="text" inputMode="numeric"
+        value={draft !== null ? draft : value}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { commit(e.target.value); e.target.blur(); }
+          if (e.key === "Escape") { setDraft(null); e.target.blur(); }
+          if (e.key === "ArrowUp") { e.preventDefault(); onChange((value + 1) % 360); }
+          if (e.key === "ArrowDown") { e.preventDefault(); onChange((value + 359) % 360); }
+        }}
+        onFocus={(e) => e.target.select()}
+        style={{ ...IN, width: "62px", textAlign: "right", padding: "4px 6px" }}
+      />
+      <span style={{ fontSize: "12px", color: "#a1a1aa" }}>°</span>
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- component */
 
 const MARGIN = 42;
@@ -2679,39 +2720,6 @@ function PathPilot() {
     });
   };
 
-  /** Heading picker: drag the slider or type a value. Out-of-range entries wrap
-   *  rather than being rejected, so typing 400 gives 40 and -90 gives 270. */
-  const HeadingField = ({ value, onChange }) => {
-    const [draft, setDraft] = useState(null);
-    const commit = (raw) => {
-      setDraft(null);
-      const n = parseFloat(raw);
-      if (Number.isNaN(n)) return;
-      onChange(((Math.round(n) % 360) + 360) % 360);
-    };
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <input type="range" min="0" max="359" value={value}
-               onChange={(e) => onChange(Number(e.target.value))} style={{ flex: 1 }} />
-        <input
-          type="text" inputMode="numeric"
-          value={draft !== null ? draft : value}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={(e) => commit(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { commit(e.target.value); e.target.blur(); }
-            if (e.key === "Escape") { setDraft(null); e.target.blur(); }
-            if (e.key === "ArrowUp") { e.preventDefault(); onChange((value + 1) % 360); }
-            if (e.key === "ArrowDown") { e.preventDefault(); onChange((value + 359) % 360); }
-          }}
-          onFocus={(e) => e.target.select()}
-          style={{ ...IN, width: "62px", textAlign: "right", padding: "4px 6px" }}
-        />
-        <span style={{ fontSize: "12px", color: "#a1a1aa" }}>°</span>
-      </div>
-    );
-  };
-
   const TABS = [
     { id: "path", label: "🗺️ Path" }, { id: "waypoints", label: "📋 Waypoints" },
     { id: "motion", label: "🎚️ Motion" }, { id: "code", label: "💻 Code" },
@@ -2906,7 +2914,7 @@ function PathPilot() {
                   <NumField label="Y (in)" value={startPose.y} step={0.5} onChange={(v) => updateStart("y", clamp(v))} />
                 </div>
                 <label style={LB}>Heading (0 = away from audience)</label>
-                <HeadingField value={startPose.heading} onChange={(v) => updateStart("heading", v)} />
+                <HeadingField value={startPose.heading} onChange={(v) => updateStart("heading", v)} IN={IN} />
               </div>
 
               {selectedWp && (
@@ -2926,7 +2934,7 @@ function PathPilot() {
                   </div>
                   <label style={LB}>Heading (°)</label>
                   <div style={{ marginBottom: "10px" }}>
-                    <HeadingField value={selectedWp.heading} onChange={(v) => updateWaypoint(selectedWp.id, "heading", v)} />
+                    <HeadingField value={selectedWp.heading} onChange={(v) => updateWaypoint(selectedWp.id, "heading", v)} IN={IN} />
                   </div>
                   <div style={{ marginBottom: "10px" }}>
                     <label style={LB}>Action</label>
