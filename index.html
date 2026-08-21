@@ -2684,7 +2684,12 @@ function PathPilot() {
         <div key={p.key} style={{ marginBottom: "10px" }}>
           <label style={LB}>{p.label}</label>
           <select style={IN} value={cur || ""} onChange={(e) => set(p.key, Number(e.target.value))}>
-            {season.tags.map(t => <option key={t.id} value={t.id}>{t.id} — {season.alliances[t.owner].label} goal</option>)}
+            {season.tags.map(t => {
+              // A tag need not belong to an alliance — INTO THE DEEP has two
+              // neutral wall tags, and alliances[null] is undefined.
+              const owner = t.owner ? season.alliances[t.owner] : null;
+              return <option key={t.id} value={t.id}>{t.id} — {owner ? owner.label + " side" : "neutral"}</option>;
+            })}
             {season.tags.length === 0 && <option value="">no tags this season</option>}
           </select>
         </div>
@@ -3392,7 +3397,9 @@ function PathPilot() {
                   ["Obstacles", season.obstacles.length ? season.obstacles.map(o => o.name).join(", ") : "none"],
                   ["Launch lines", season.launchLines.length || "none"],
                   ["Start rules", (season.dsl.startRules || []).map(r => r.type).join(", ") || "none"],
-                  ["Field tags", season.tags.length ? season.tags.map(t => `${t.id} (${season.alliances[t.owner].label})`).join(", ") : "none"],
+                  ["Field tags", season.tags.length
+                    ? season.tags.map(t => `${t.id} (${t.owner && season.alliances[t.owner] ? season.alliances[t.owner].label : "neutral"})`).join(", ")
+                    : "none"],
                   ["Off-field tags", season.offFieldTags.length ? season.offFieldTags.map(o => `${o.ids} — ${o.note}`).join("; ") : "none"],
                   ["Blue start", season.alliances.blue.startRegion.label],
                   ["Red start", season.alliances.red.startRegion.label],
