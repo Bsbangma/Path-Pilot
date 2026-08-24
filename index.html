@@ -437,10 +437,23 @@ function compileSeason(dsl) {
     );
   };
 
-  const actionDuration = (action, params) => {
+  /**
+   * How long an action takes, for the time budget.
+   *
+   * A macro's real duration comes from the robot profile — BotBuilder sums it
+   * from the macro's own steps, so a three-second intake counts as three and a
+   * latching motor_on counts as zero. The season pack's flat estimate is only a
+   * fallback for when no profile is loaded, and using it for everything made a
+   * path with several macros read several seconds short.
+   */
+  const actionDuration = (action, params, profile) => {
     const def = dsl.actions.find(a => a.id === action);
     if (!def) return 0;
     if (def.durationFrom && params[def.durationFrom] !== undefined) return Number(params[def.durationFrom]) || 0;
+    if (action === "macro" && params && params.macroMethod && profile && profile.macros) {
+      const m = profile.macros.find(x => x.method === params.macroMethod);
+      if (m && m.java && typeof m.java.estSeconds === "number") return m.java.estSeconds;
+    }
     return def.est || 0;
   };
 
@@ -485,6 +498,7 @@ const DEFAULT_MOTION = {
   settleTime: 0.15,     // s
   runawayMargin: 4.0,   // in — abort if the error diverges this far from its best
   runawayMinDistance: 6.0, // in — legs shorter than this are turns, not drives
+  tagSeekTimeout: 3.0,  // s to give up looking for a tag
   logRuns: true,        // write a CSV of every loop to the Control Hub
   timeoutBase: 1.5,     // s of slack per leg
   timeoutFactor: 2.5,   // multiple of the estimated leg time
@@ -514,13 +528,15 @@ const legTime = (from, to, motion) => {
   return Math.max(drive, turn) + motion.settleTime;
 };
 
-const estimatePath = (startPose, waypoints, motion, season) => {
+const estimatePath = (startPose, waypoints, motion, season, profile) => {
   const legs = [];
   let prev = startPose;
   let total = 0;
   waypoints.forEach((wp) => {
     const move = legTime(prev, wp, motion);
-    const act = season.actionDuration(wp.action, wp.actionParams || {});
+    // The profile carries each macro's real duration; without one the season's
+    // flat estimate is all there is.
+    const act = season.actionDuration(wp.action, wp.actionParams || {}, profile);
     legs.push({ id: wp.id, move, action: act, cumulative: total + move + act });
     total += move + act;
     prev = wp;
@@ -637,13 +653,14 @@ const DECODE_PACK = {
       emit: ["sleep({time:ms});"] },
     { id: "faceTag", label: "Face AprilTag", icon: "👁️", est: 0.6,
       params: [{ key: "tagId", label: "Tag ID", type: "tagId", default: "@myTag" }],
-      emit: ["faceAprilTag({tagId});"] },
+      emit: ["if (!faceAprilTag({tagId})) { finish(); return; }"] },
     { id: "driveToTag", label: "Drive to AprilTag", icon: "🏷️", est: 1.5,
       params: [
         { key: "tagId", label: "Tag ID", type: "tagId", default: "@myTag" },
-        { key: "distance", label: "Distance (in)", type: "number", default: 12, step: 0.5 },
+        { key: "distance", label: "Camera to tag (in)", type: "number", default: 12, step: 0.5 },
+        { key: "offset", label: "Sideways offset (- left, + right)", type: "number", default: 0, step: 0.5 },
       ],
-      emit: ["driveToAprilTag({tagId}, {distance});"] },
+      emit: ["if (!driveToAprilTag({tagId}, {distance}, {offset})) { finish(); return; }"] },
     { id: "readMotif", label: "Read MOTIF (obelisk)", icon: "🔍", est: 0.5,
       emit: ["int motif = readObeliskMotif();  // 21/22/23 -> GPP, PGP, PPG"] },
     { id: "macro", label: "Robot macro", icon: "📋", est: 1.0,
@@ -1162,7 +1179,7 @@ const DEEP_PACK = {
         }
       ],
       "emit": [
-        "faceAprilTag({tagId});"
+        "if (!faceAprilTag({tagId})) { finish(); return; }"
       ]
     },
     {
@@ -1179,14 +1196,21 @@ const DEEP_PACK = {
         },
         {
           "key": "distance",
-          "label": "Distance (in)",
+          "label": "Camera to tag (in)",
           "type": "number",
           "default": 12,
+          "step": 0.5
+        },
+        {
+          "key": "offset",
+          "label": "Sideways offset (- left, + right)",
+          "type": "number",
+          "default": 0,
           "step": 0.5
         }
       ],
       "emit": [
-        "driveToAprilTag({tagId}, {distance});"
+        "if (!driveToAprilTag({tagId}, {distance}, {offset})) { finish(); return; }"
       ]
     },
     {
@@ -1414,6 +1438,7 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "     * beats driving at full power until the timeout expires. */",
     `    public static final double RUNAWAY_MARGIN = ${motion.runawayMargin};      // in`,
     `    public static final double RUNAWAY_MIN_DISTANCE = ${motion.runawayMinDistance};  // in`,
+    `    public static final double TAG_SEEK_TIMEOUT = ${motion.tagSeekTimeout};    // s before giving up on a tag`,
     `    public static final double MIN_POWER = ${motion.minPower};           // beats static friction`,
     `    public static final double MAX_POWER = ${motion.maxPower};`,
     "",
@@ -1944,30 +1969,50 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "",
       "    private boolean faceAprilTag(int tagId) {",
       "        legTimer.reset();",
-      "        while (opModeIsActive() && legTimer.seconds() < 3.0) {",
+      "        while (opModeIsActive() && legTimer.seconds() < TAG_SEEK_TIMEOUT) {",
       "            updatePose();",
       "            Position p = seeTag(tagId);",
       "            if (p == null) { stopDrive(); continue; }",
-      "            double angleErr = Math.toDegrees(Math.atan2(p.x * 39.37, p.z * 39.37));",
+      "            double angleErr = Math.toDegrees(Math.atan2(p.x * 39.3701, p.z * 39.3701));",
       "            if (Math.abs(angleErr) <= HEADING_TOLERANCE) { stopDrive(); return true; }",
       "            double turn = clamp(HEAD_KP * angleErr, -MAX_POWER, MAX_POWER);",
       "            if (Math.abs(turn) < MIN_POWER) turn = Math.copySign(MIN_POWER, turn);",
       "            setMecanum(0, 0, turn);",
       "        }",
       "        stopDrive();",
+      "        aborted = true;",
+      '        telemetry.addLine("Could not face tag " + tagId + " in time");',
+      "        telemetry.update();",
       "        return false;",
       "    }",
       "",
-      "    private boolean driveToAprilTag(int tagId, double targetDistanceIn) {",
+      "    /**",
+      "     * Drives until the CAMERA is targetDistanceIn from the tag.",
+      "     *",
+      "     * Camera-relative on purpose. The Limelight reports its own distance, and",
+      "     * that is the number you set here — if the camera sits forward of the",
+      "     * robot's centre, allow for it in the distance you ask for.",
+      "     *",
+      "     * lateralIn shifts the target sideways: negative left, positive right.",
+      "     */",
+      "    private boolean driveToAprilTag(int tagId, double targetDistanceIn, double lateralIn) {",
       "        legTimer.reset();",
-      "        while (opModeIsActive() && legTimer.seconds() < 3.0) {",
+      "        boolean sawTag = false;",
+      "        while (opModeIsActive() && legTimer.seconds() < TAG_SEEK_TIMEOUT) {",
       "            updatePose();",
       "            Position p = seeTag(tagId);",
       "            if (p == null) { stopDrive(); continue; }",
-      "            double xIn = p.x * 39.37, zIn = p.z * 39.37;",
+      "            sawTag = true;",
+      "",
+      "            double xIn = p.x * 39.3701;",
+      "            double zIn = p.z * 39.3701;",
+      "",
       "            double rangeErr = zIn - targetDistanceIn;",
+      "            double lateralErr = xIn - lateralIn;",
       "            double angleErr = Math.toDegrees(Math.atan2(xIn, zIn));",
-      "            if (Math.abs(rangeErr) <= POS_TOLERANCE && Math.abs(angleErr) <= HEADING_TOLERANCE) {",
+      "            if (Math.abs(rangeErr) <= POS_TOLERANCE",
+      "                    && Math.abs(lateralErr) <= POS_TOLERANCE",
+      "                    && Math.abs(angleErr) <= HEADING_TOLERANCE) {",
       "                stopDrive();",
       "                return true;",
       "            }",
@@ -1975,9 +2020,20 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "            if (Math.abs(rangeErr) > POS_TOLERANCE && Math.abs(forward) < MIN_POWER) {",
       "                forward = Math.copySign(MIN_POWER, forward);",
       "            }",
-      "            setMecanum(forward, 0, clamp(HEAD_KP * angleErr, -MAX_POWER, MAX_POWER));",
+      "            double strafe = clamp(TRANS_KP * lateralErr, -MAX_POWER, MAX_POWER);",
+      "            if (Math.abs(lateralErr) > POS_TOLERANCE && Math.abs(strafe) < MIN_POWER) {",
+      "                strafe = Math.copySign(MIN_POWER, strafe);",
+      "            }",
+      "            // setMecanum takes forward/left, and a positive lateral error means",
+      "            // the tag is to the right, so the robot must go right — hence -strafe.",
+      "            setMecanum(forward, -strafe, clamp(HEAD_KP * angleErr, -MAX_POWER, MAX_POWER));",
       "        }",
       "        stopDrive();",
+      "        aborted = true;",
+      "        telemetry.addLine(sawTag",
+      "                ? \"Tag \" + tagId + \" seen but never reached in time\"",
+      "                : \"Tag \" + tagId + \" never came into view\");",
+      "        telemetry.update();",
       "        return false;",
       "    }",
       "",
@@ -2399,7 +2455,7 @@ function PathPilot() {
   const legBlockedCount = Object.keys(legBlocked).filter(k => !wpBlocked[k]).length;
 
   /* ---- timing ---- */
-  const timing = estimatePath(startPose, waypoints, motion, season);
+  const timing = estimatePath(startPose, waypoints, motion, season, profile);
   const budget = season.autoSeconds;
   const overBudget = budget && timing.total > budget;
 
@@ -3134,6 +3190,18 @@ function PathPilot() {
                 <div style={{ fontSize: "13px", lineHeight: 1.8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}><span>Legs</span><strong>{timing.legs.reduce((a, l) => a + l.move, 0).toFixed(1)}s</strong></div>
                   <div style={{ display: "flex", justifyContent: "space-between" }}><span>Actions</span><strong>{timing.legs.reduce((a, l) => a + l.action, 0).toFixed(1)}s</strong></div>
+                  {(() => {
+                    // Without a profile a macro's real duration is unknown, and the
+                    // season's flat estimate will usually be short.
+                    const guessed = waypoints.filter(w => w.action === "macro" &&
+                      !(profile && profile.macros && profile.macros.some(m => m.method === (w.actionParams || {}).macroMethod))).length;
+                    return guessed > 0 ? (
+                      <div style={{ fontSize: "11px", color: "#FBBF24", marginTop: "4px", lineHeight: 1.5 }}>
+                        {guessed} macro{guessed === 1 ? "" : "s"} counted at a nominal 1s — load the robot
+                        profile and the real durations are used instead.
+                      </div>
+                    ) : null;
+                  })()}
                   <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #3f3f46", marginTop: "4px", paddingTop: "4px", color: overBudget ? "#f87171" : "#6EE7B7" }}>
                     <span>Total</span><strong>{timing.total.toFixed(1)}s{budget ? ` / ${budget}s` : ""}</strong>
                   </div>
