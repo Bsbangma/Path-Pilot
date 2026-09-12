@@ -338,11 +338,15 @@ function compileSeason(dsl) {
           const reg = A.startRegion;
           if (!reg) break;
           const xs = body.map(p => p[0]), ys = body.map(p => p[1]);
+          // A robot flush against a region boundary lands exactly on it, and the
+          // corner maths leaves a rounding tail — sin(90 degrees) is not exactly 1.
+          // Without the tolerance a legal flush start reads as outside.
+          const REG_EPS = 0.02;
           const bad =
-            (reg.xMin !== undefined && Math.min(...xs) < reg.xMin) ||
-            (reg.xMax !== undefined && Math.max(...xs) > reg.xMax) ||
-            (reg.yMin !== undefined && Math.min(...ys) < reg.yMin) ||
-            (reg.yMax !== undefined && Math.max(...ys) > reg.yMax);
+            (reg.xMin !== undefined && Math.min(...xs) < reg.xMin - REG_EPS) ||
+            (reg.xMax !== undefined && Math.max(...xs) > reg.xMax + REG_EPS) ||
+            (reg.yMin !== undefined && Math.min(...ys) < reg.yMin - REG_EPS) ||
+            (reg.yMax !== undefined && Math.max(...ys) > reg.yMax + REG_EPS);
           if (bad) issues.push((rule.message || "Outside {region}").replace("{region}", reg.label || "the start region"));
           break;
         }
@@ -1238,7 +1242,477 @@ const DEEP_PACK = {
   ]
 };
 
-const BUILTIN_PACKS = [DECODE_PACK, DEEP_PACK, BLANK_PACK];
+const BIOBUZZ_PACK = {
+  "pathpilotSeason": 1,
+  "id": "biobuzz-2026",
+  "name": "BIOBUZZ",
+  "years": "2026-2027",
+  "verified": false,
+  "source": "FTC BIOBUZZ Competition Manual V1 (12 Sep 2026) \u2014 sections 9.1-9.9, 10.3, rule G304",
+  "autoSeconds": 30,
+  "field": {
+    "size": 144,
+    "tile": 24,
+    "columns": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F"
+    ],
+    "audienceLabel": "AUDIENCE"
+  },
+  "alliances": {
+    "red": {
+      "color": "#EF4444",
+      "label": "Red",
+      "areaSide": "left",
+      "wall": "left",
+      "tag": 34,
+      "startRegion": {
+        "xMin": 0,
+        "xMax": 72,
+        "label": "columns A-C, touching a perimeter wall, clear of the LOADING ZONE and FLOWERS"
+      }
+    },
+    "blue": {
+      "color": "#3B82F6",
+      "label": "Blue",
+      "areaSide": "right",
+      "wall": "right",
+      "tag": 38,
+      "startRegion": {
+        "xMin": 72,
+        "xMax": 144,
+        "label": "columns D-F, touching a perimeter wall, clear of the LOADING ZONE and FLOWERS"
+      }
+    }
+  },
+  "mirror": {
+    "axis": "rotate180",
+    "at": 72,
+    "tagSwap": {}
+  },
+  "geometry": {
+    "polygons": [
+      {
+        "key": "hive-frame",
+        "kind": "structure",
+        "points": [
+          [
+            47.3,
+            52.5
+          ],
+          [
+            96.7,
+            52.5
+          ],
+          [
+            96.7,
+            91.5
+          ],
+          [
+            47.3,
+            91.5
+          ]
+        ],
+        "label": "HIVE",
+        "labelAt": [
+          72,
+          72
+        ]
+      }
+    ],
+    "rects": [
+      {
+        "key": "loading-red",
+        "owner": "red",
+        "x": 0,
+        "y": 97,
+        "width": 11,
+        "height": 23,
+        "label": "LOAD",
+        "dashed": true
+      },
+      {
+        "key": "loading-blue",
+        "owner": "blue",
+        "x": 133,
+        "y": 24,
+        "width": 11,
+        "height": 23,
+        "label": "LOAD",
+        "dashed": true
+      },
+      {
+        "key": "garden-red",
+        "owner": "red",
+        "x": 1,
+        "y": 2,
+        "width": 23,
+        "height": 2,
+        "label": "GARDEN",
+        "dashed": true
+      },
+      {
+        "key": "garden-blue",
+        "owner": "blue",
+        "x": 120,
+        "y": 140,
+        "width": 23,
+        "height": 2,
+        "label": "GARDEN",
+        "dashed": true
+      }
+    ],
+    "tapeLines": [],
+    "markers": [],
+    "markerColors": {
+      "P": "#EAB308",
+      "R": "#EF4444",
+      "B": "#3B82F6"
+    }
+  },
+  "tags": [
+    {
+      "id": 30,
+      "owner": "red",
+      "x": 60,
+      "y": 81.4
+    },
+    {
+      "id": 31,
+      "owner": "red",
+      "x": 60,
+      "y": 81.4
+    },
+    {
+      "id": 32,
+      "owner": "red",
+      "x": 60,
+      "y": 81.4
+    },
+    {
+      "id": 33,
+      "owner": "red",
+      "x": 60,
+      "y": 81.4
+    },
+    {
+      "id": 34,
+      "owner": "red",
+      "x": 60,
+      "y": 62.6
+    },
+    {
+      "id": 35,
+      "owner": "red",
+      "x": 60,
+      "y": 62.6
+    },
+    {
+      "id": 36,
+      "owner": "red",
+      "x": 60,
+      "y": 62.6
+    },
+    {
+      "id": 37,
+      "owner": "red",
+      "x": 60,
+      "y": 62.6
+    },
+    {
+      "id": 38,
+      "owner": "blue",
+      "x": 84,
+      "y": 62.6
+    },
+    {
+      "id": 39,
+      "owner": "blue",
+      "x": 84,
+      "y": 62.6
+    },
+    {
+      "id": 40,
+      "owner": "blue",
+      "x": 84,
+      "y": 62.6
+    },
+    {
+      "id": 41,
+      "owner": "blue",
+      "x": 84,
+      "y": 62.6
+    },
+    {
+      "id": 42,
+      "owner": "blue",
+      "x": 84,
+      "y": 81.4
+    },
+    {
+      "id": 43,
+      "owner": "blue",
+      "x": 84,
+      "y": 81.4
+    },
+    {
+      "id": 44,
+      "owner": "blue",
+      "x": 84,
+      "y": 81.4
+    },
+    {
+      "id": 45,
+      "owner": "blue",
+      "x": 84,
+      "y": 81.4
+    }
+  ],
+  "offFieldTags": [],
+  "obstacles": [
+    {
+      "name": "HIVE structure",
+      "role": "structure",
+      "owner": null,
+      "shape": {
+        "type": "polygon",
+        "points": [
+          [
+            47.3,
+            52.5
+          ],
+          [
+            96.7,
+            52.5
+          ],
+          [
+            96.7,
+            91.5
+          ],
+          [
+            47.3,
+            91.5
+          ]
+        ]
+      }
+    },
+    {
+      "name": "FLOWER (far wall)",
+      "role": "structure",
+      "owner": null,
+      "shape": {
+        "type": "rect",
+        "x": 45,
+        "y": 138,
+        "width": 8,
+        "height": 6
+      }
+    },
+    {
+      "name": "FLOWER (blue wall)",
+      "role": "structure",
+      "owner": null,
+      "shape": {
+        "type": "rect",
+        "x": 138,
+        "y": 91,
+        "width": 6,
+        "height": 8
+      }
+    },
+    {
+      "name": "FLOWER (audience wall)",
+      "role": "structure",
+      "owner": null,
+      "shape": {
+        "type": "rect",
+        "x": 91,
+        "y": 0,
+        "width": 8,
+        "height": 6
+      }
+    },
+    {
+      "name": "FLOWER (red wall)",
+      "role": "structure",
+      "owner": null,
+      "shape": {
+        "type": "rect",
+        "x": 0,
+        "y": 45,
+        "width": 6,
+        "height": 8
+      }
+    }
+  ],
+  "launchLines": [],
+  "presetsDefinedFor": "red",
+  "startPresets": [
+    {
+      "id": "audienceWall",
+      "label": "{Alliance} audience wall",
+      "x": 36,
+      "y": "halfLength",
+      "heading": 0
+    },
+    {
+      "id": "farWall",
+      "label": "{Alliance} far wall",
+      "x": 36,
+      "y": "144 - halfLength",
+      "heading": 180
+    },
+    {
+      "id": "allianceWall",
+      "label": "{Alliance} own wall, mid-field",
+      "x": "halfLength",
+      "y": 68,
+      "heading": 90
+    }
+  ],
+  "startRules": [
+    {
+      "type": "insideField",
+      "message": "G304.A: the robot must be fully inside the FIELD perimeter"
+    },
+    {
+      "type": "withinRegion",
+      "message": "G304.A: must be fully within your own columns ({region})"
+    },
+    {
+      "type": "touchingAny",
+      "targets": [
+        "perimeter"
+      ],
+      "message": "G304.C: must be touching the FIELD perimeter wall"
+    },
+    {
+      "type": "notInZones",
+      "zones": [
+        "loading-red",
+        "loading-blue"
+      ],
+      "message": "G304.E: cannot start in the {zone} zone"
+    },
+    {
+      "type": "noOverlap",
+      "grace": 1,
+      "message": "G304.D: robot overlaps the {obstacle}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "none",
+      "label": "None",
+      "icon": "\u2b06\ufe0f",
+      "est": 0
+    },
+    {
+      "id": "wait",
+      "label": "Wait",
+      "icon": "\u23f1\ufe0f",
+      "est": 1,
+      "durationFrom": "time",
+      "params": [
+        {
+          "key": "time",
+          "label": "Wait time (sec)",
+          "type": "number",
+          "default": 1,
+          "step": 0.1,
+          "min": 0.1
+        }
+      ],
+      "emit": [
+        "sleep({time:ms});"
+      ]
+    },
+    {
+      "id": "faceTag",
+      "label": "Aim at CELL tag",
+      "icon": "\ud83c\udfaf",
+      "est": 0.6,
+      "params": [
+        {
+          "key": "tagId",
+          "label": "Tag ID",
+          "type": "tagId",
+          "default": "@myTag"
+        }
+      ],
+      "emit": [
+        "if (!faceAprilTag({tagId})) { finish(); return; }"
+      ]
+    },
+    {
+      "id": "driveToTag",
+      "label": "Drive to CELL tag",
+      "icon": "\ud83c\udff7\ufe0f",
+      "est": 1.5,
+      "params": [
+        {
+          "key": "tagId",
+          "label": "Tag ID",
+          "type": "tagId",
+          "default": "@myTag"
+        },
+        {
+          "key": "distance",
+          "label": "Camera to tag (in)",
+          "type": "number",
+          "default": 36,
+          "step": 0.5
+        },
+        {
+          "key": "offset",
+          "label": "Sideways offset (- left, + right)",
+          "type": "number",
+          "default": 0,
+          "step": 0.5
+        }
+      ],
+      "emit": [
+        "if (!driveToAprilTag({tagId}, {distance}, {offset})) { finish(); return; }"
+      ]
+    },
+    {
+      "id": "macro",
+      "label": "Robot macro",
+      "icon": "\ud83d\udccb",
+      "est": 1.0,
+      "params": [
+        {
+          "key": "macroMethod",
+          "label": "Macro",
+          "type": "macro",
+          "default": ""
+        }
+      ],
+      "emit": [
+        "{macroMethod}();"
+      ]
+    }
+  ],
+  "codeNotes": [
+    "AUTO is 30 seconds",
+    "G304: start fully inside the FIELD, within your own columns (A-C red, D-F blue),",
+    "touching a perimeter wall, clear of the LOADING ZONE, and not contacting a FLOWER",
+    "Red ALLIANCE AREA is on the LEFT from the audience; red is columns A-C",
+    "AprilTags sit on the UNDERSIDE of each CELL, about 44 in above the tiles, facing down.",
+    "  red far CELL 30-33   red audience CELL 34-37",
+    "  blue audience CELL 38-41   blue far CELL 42-45",
+    "The HIVE frame has a rectangular base of extrusion on the floor, 49.46 x 38.95,",
+    "so it is modelled solid. The structure itself clears 25.5 in above the tiles",
+    "(stated, Figure 9-10), but the base bars still block the way in.",
+    "CELL opening sits 53.5 to 65.6 in above the tiles."
+  ]
+};
+
+const BUILTIN_PACKS = [BIOBUZZ_PACK, DECODE_PACK, DEEP_PACK, BLANK_PACK];
 
 /* ============================================================================
  * Self-contained OpMode generator.
