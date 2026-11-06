@@ -3104,6 +3104,78 @@ function PathPilot() {
       if (waypoints.length === 0) commitSeason(compiled.id); else setPendingSeason(compiled.id);
   };
 
+  /* ---- drag and drop ----
+   * A dropped file goes straight to the right loader, so there is no dialog and
+   * no file picker. Every format PathPilot reads identifies itself in its own
+   * first object — pathpilotProfile, app:"PathPilot", pathpilotSeason — and a
+   * run log is not JSON at all, so routing is a check rather than a guess.
+   *
+   * The browser's default for a dropped file is to navigate to it, which would
+   * discard an unsaved path. dragover must preventDefault everywhere, not only
+   * over the overlay. */
+  const [dragFile, setDragFile] = useState(false);
+  const dragDepth = useRef(0);
+  const dropState = useRef({});
+  dropState.current = { transfer, loadPathText, loadProfileText, loadPackText, loadLogText, setNotice, setTransfer };
+
+  const routeDroppedText = (text, filename) => {
+    const st = dropState.current;
+    // A drop while the import dialog is open fills it rather than bypassing it —
+    // the dialog was opened for a specific format, so honour that choice.
+    if (st.transfer && st.transfer.mode === "import") {
+      st.setTransfer(t => ({ ...t, text }));
+      return;
+    }
+    let obj = null;
+    try { obj = JSON.parse(text); } catch { obj = null; }
+    if (obj && typeof obj === "object") {
+      if (obj.pathpilotProfile !== undefined) return st.loadProfileText(text);
+      if (obj.app === "PathPilot") return st.loadPathText(text);
+      if (obj.pathpilotSeason !== undefined) return st.loadPackText(text);
+      return st.setNotice({ bad: true, msg: `"${filename}" is JSON, but not a PathPilot path, profile or season pack.` });
+    }
+    // Not JSON — the only other thing PathPilot reads is a Robot Controller log,
+    // and loadLogText already reports it clearly when there is nothing in it.
+    st.loadLogText(text);
+  };
+
+  useEffect(() => {
+    const over = (e) => { if (e.dataTransfer) e.dataTransfer.dropEffect = "copy"; e.preventDefault(); };
+    const hasFile = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files");
+    const enter = (e) => {
+      if (!hasFile(e)) return;
+      dragDepth.current++;
+      setDragFile(true);
+    };
+    // dragleave fires every time the cursor crosses into a child element, so a
+    // plain boolean flickers. Counting enters against leaves does not.
+    const leave = () => {
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDragFile(false);
+    };
+    const drop = (e) => {
+      e.preventDefault();
+      dragDepth.current = 0;
+      setDragFile(false);
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => routeDroppedText(String(rd.result), f.name);
+      rd.onerror = () => dropState.current.setNotice({ bad: true, msg: `Could not read "${f.name}".` });
+      rd.readAsText(f);
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, []);
+
   /* ---- codegen ---- */
   const opModeClassName = javaClassName(
     `${season.name} ${alliance} ${pathName || "Auto"}`.replace(/\s+/g, " ").trim());
@@ -3359,6 +3431,25 @@ function PathPilot() {
 
         {/* Transfer modal — file access is blocked in sandboxed previews, so
             every save/open also works by copy and paste. */}
+        {dragFile && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(9,9,11,0.82)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        pointerEvents: "none", padding: "20px" }}>
+            <div style={{ border: "2px dashed #10B981", borderRadius: "14px", padding: "32px 44px",
+                          textAlign: "center", background: "rgba(16,185,129,0.07)" }}>
+              <div style={{ fontSize: "30px", marginBottom: "8px" }}>📂</div>
+              <div style={{ fontSize: "16px", fontWeight: 500, color: "#6EE7B7" }}>
+                {transfer && transfer.mode === "import" ? `Drop to fill "${transfer.title}"` : "Drop to load"}
+              </div>
+              <div style={{ fontSize: "12px", color: "#a1a1aa", marginTop: "6px", lineHeight: 1.6 }}>
+                {transfer && transfer.mode === "import"
+                  ? "The file goes into the box behind this."
+                  : "Path, robot profile, season pack, or a Robot Controller log —\nPathPilot works out which from the file itself."}
+              </div>
+            </div>
+          </div>
+        )}
+
         {transfer && (
           <div onClick={() => setTransfer(null)}
                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex",
