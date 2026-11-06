@@ -2199,13 +2199,28 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   // Mechanism motors keep the behaviour set in BotBuilder, so an arm that holds
   // position in TeleOp holds it here too.
   const auxZeroPower = {};
+  const auxRunMode = {};
+  const auxReversed = {};
   ((profile && profile.auxMotors) || []).forEach(a => {
-    if (a.hardwareName) auxZeroPower[a.hardwareName] = a.zeroPower || "FLOAT";
+    if (!a.hardwareName) return;
+    auxZeroPower[a.hardwareName] = a.zeroPower || "FLOAT";
+    // A motor whose encoder port is taken by an odometry pod, or that has no
+    // encoder at all, cannot run closed-loop. BotBuilder already worked that out
+    // and stored the answer in runMode; forcing RUN_USING_ENCODER here gave a
+    // motor that barely turned. hasEncoder is the fallback when runMode is absent
+    // in an older profile.
+    auxRunMode[a.hardwareName] = a.runMode
+      || (a.hasEncoder === false ? "RUN_WITHOUT_ENCODER" : "RUN_USING_ENCODER");
+    auxReversed[a.hardwareName] = !!a.reversed;
   });
   Array.from(macroMotors).forEach(m => {
     P(`        ${m} = hardwareMap.get(DcMotorEx.class, "${m}");`);
+    // The macro bodies BotBuilder generated assume the direction set in the
+    // profile is in force, so an intake written as setPower(-1) runs backwards
+    // here unless the reversal is applied.
+    P(`        ${m}.setDirection(DcMotorSimple.Direction.${auxReversed[m] ? "REVERSE" : "FORWARD"});`);
     P(`        ${m}.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.${auxZeroPower[m] || "FLOAT"});`);
-    P(`        ${m}.setMode(DcMotor.RunMode.RUN_USING_ENCODER);`);
+    P(`        ${m}.setMode(DcMotor.RunMode.${auxRunMode[m] || "RUN_USING_ENCODER"});`);
   });
   Array.from(macroServos).forEach(m => P(`        ${m} = hardwareMap.get(Servo.class, "${m}");`));
   if (macroBlinkin) P('        blinkin = hardwareMap.get(Servo.class, "blinkin");');
