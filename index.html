@@ -3233,7 +3233,14 @@ function PathPilot() {
         <text x={sp.x} y={sp.y} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="13" fontWeight="bold" style={{ pointerEvents: "none" }}>S</text>
       </g>
     );
-    waypoints.forEach((wp, i) => {
+    /* Overlapping waypoints are drawn in index order, so a higher number sits on
+     * top of a lower one and buries it — unclickable and undraggable. Drawing
+     * the selected one last lifts it out from under the pile, which is the only
+     * way to grab it again once the chip strip has selected it. */
+    const order = waypoints.map((wp, i) => ({ wp, i }));
+    const selAt = order.findIndex(o => selection.type === "wp" && selection.id === o.wp.id);
+    if (selAt >= 0) order.push(order.splice(selAt, 1)[0]);
+    order.forEach(({ wp, i }) => {
       const p = toSvg(wp.x, wp.y);
       const sel = selection.type === "wp" && selection.id === wp.id;
       const bad = !!wpBlocked[wp.id]; const legBad = !!legBlocked[wp.id];
@@ -3476,6 +3483,36 @@ function PathPilot() {
                 {renderPath()}
                 <text x={MARGIN + FIELD * SCALE / 2} y={VIEW - 8} textAnchor="middle" fill="#71717a" fontSize="10" fontWeight="600" letterSpacing="1" style={{ pointerEvents: "none" }}>{season.audienceLabel}</text>
               </svg>
+              {/* Jump strip. With several waypoints stacked on one spot the buried
+                * ones cannot be clicked on the field at all, so selecting by number
+                * is the only way in. Selecting also raises the point to the top of
+                * the draw order, so it becomes draggable again. */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", alignItems: "center", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #3f3f46" }}>
+                <span style={{ fontSize: "11px", color: "#71717a", marginRight: "3px" }}>Jump to</span>
+                {(() => {
+                  const chip = (key, label, active, bg, ring, onClick, title) => (
+                    <button key={key} onClick={onClick} title={title}
+                      style={{ width: "26px", height: "26px", borderRadius: "50%", background: bg,
+                               border: `2px solid ${active ? ring : "transparent"}`,
+                               color: "white", fontSize: "11px", fontWeight: "bold", cursor: "pointer",
+                               padding: 0, lineHeight: 1, flex: "0 0 auto" }}>{label}</button>
+                  );
+                  const out = [chip("S", "S", selection.type === "start", "#B45309", "#FCD34D",
+                                    () => setSelection({ type: "start" }),
+                                    startLegal ? "Starting position" : startIssues[0])];
+                  waypoints.forEach((wp, i) => {
+                    const sel = selection.type === "wp" && selection.id === wp.id;
+                    const bad = wpBlocked[wp.id], legBad = legBlocked[wp.id];
+                    out.push(chip(wp.id, i + 1, sel,
+                      bad ? "#B91C1C" : (legBad ? "#B45309" : (sel ? "#10B981" : "#374151")),
+                      "#6EE7B7",
+                      () => setSelection({ type: "wp", id: wp.id }),
+                      bad ? `Overlaps the ${bad}` : (legBad ? `Path passes through the ${legBad}` : `Waypoint ${i + 1}`)));
+                  });
+                  return out;
+                })()}
+                {waypoints.length === 0 && <span style={{ fontSize: "11px", color: "#52525b" }}>no waypoints yet</span>}
+              </div>
               <div style={{ fontSize: "11px", color: "#71717a", marginTop: "8px", textAlign: "center" }}>Click empty field to add • Click a point to edit • Drag to move</div>
             </div>
 
