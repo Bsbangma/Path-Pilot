@@ -532,10 +532,13 @@ const legTime = (from, to, motion) => {
   return Math.max(drive, turn) + motion.settleTime;
 };
 
-const estimatePath = (startPose, waypoints, motion, season, profile) => {
+const estimatePath = (startPose, waypoints, motion, season, profile, startAction, startActionParams) => {
   const legs = [];
   let prev = startPose;
-  let total = 0;
+  // An action on the start runs before the robot has moved anywhere, so it has
+  // no leg of its own — it is pure time off the top of the budget.
+  const startAct = season.actionDuration(startAction || "none", startActionParams || {}, profile);
+  let total = startAct;
   waypoints.forEach((wp) => {
     const move = legTime(prev, wp, motion);
     // The profile carries each macro's real duration; without one the season's
@@ -545,7 +548,7 @@ const estimatePath = (startPose, waypoints, motion, season, profile) => {
     total += move + act;
     prev = wp;
   });
-  return { legs, total };
+  return { legs, total, start: startAct };
 };
 
 /* ============================================================================
@@ -1776,7 +1779,8 @@ const javaClassName = (s) => {
   return parts.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
 };
 
-function generateOpMode({ className, season, alliance, startPose, waypoints, motion, profile, timing }) {
+function generateOpMode({ className, season, alliance, startPose, waypoints, motion, profile, timing,
+                         startAction, startActionParams }) {
   const A = season.alliances[alliance];
   const myTag = A.tag;
   const ctx = { myTag, alliance, season };
@@ -1832,8 +1836,9 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
 
   // Only the macros this path actually calls get emitted.
   const usedMethods = new Set(
-    waypoints.filter(w => w.action === "macro" && w.actionParams && w.actionParams.macroMethod)
-             .map(w => w.actionParams.macroMethod));
+    [{ action: startAction, actionParams: startActionParams }, ...waypoints]
+      .filter(w => w.action === "macro" && w.actionParams && w.actionParams.macroMethod)
+      .map(w => w.actionParams.macroMethod));
   const allMacros = (profile && profile.macros) || [];
   const macros = allMacros.filter(m => usedMethods.has(m.method) && m.java);
 
@@ -2043,6 +2048,18 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     ...(motion.logRuns ? ["        logStart();"] : []),
     "");
   if (needLimelight) P("        if (limelight != null) limelight.start();", "");
+
+  /* ---------------- the start action ----------------
+   * Runs after waitForStart and before the first leg, so something that needs a
+   * head start — a launcher spinning up, an arm clearing the floor — is already
+   * going while the robot drives its first leg. A latching macro (motor_on with
+   * no stop) keeps running; a blocking one holds the path until it returns. */
+  const startEmit = season.renderEmit(startAction || "none", startActionParams || {}, ctx);
+  if (startEmit.length) {
+    P(`        // Start action — before any movement  [~${(timing.start || 0).toFixed(1)}s]`);
+    startEmit.forEach(line => P(`        ${line}`));
+    P("");
+  }
 
   /* ---------------- the path ---------------- */
   P("        // ================= path =================");
@@ -2799,6 +2816,8 @@ function PathPilot() {
     const p = compileSeason(BUILTIN_PACKS[0]).getPresets("blue", 18)[0];
     return { x: p.x, y: p.y, heading: p.heading };
   });
+  const [startAction, setStartAction] = useState("none");
+  const [startActionParams, setStartActionParams] = useState({});
   const [startPreset, setStartPreset] = useState(() => compileSeason(BUILTIN_PACKS[0]).getPresets("blue", 18)[0].id);
   const [waypoints, setWaypoints] = useState([]);
   const [selection, setSelection] = useState({ type: "start" });
@@ -2936,6 +2955,7 @@ function PathPilot() {
   const mirrorPath = () => {
     const M = season.mirror;
     setStartPose(sp => { const m = M.point(sp.x, sp.y); return { x: clamp(m.x), y: clamp(m.y), heading: M.heading(sp.heading) }; });
+    setStartActionParams(ap => ap && ap.tagId ? { ...ap, tagId: M.tag(ap.tagId) } : ap);
     setWaypoints(wps => wps.map(wp => {
       const m = M.point(wp.x, wp.y);
       return { ...wp, x: clamp(m.x), y: clamp(m.y), heading: M.heading(wp.heading),
@@ -2983,7 +3003,7 @@ function PathPilot() {
   const legBlockedCount = Object.keys(legBlocked).filter(k => !wpBlocked[k]).length;
 
   /* ---- timing ---- */
-  const timing = estimatePath(startPose, waypoints, motion, season, profile);
+  const timing = estimatePath(startPose, waypoints, motion, season, profile, startAction, startActionParams);
   const budget = season.autoSeconds;
   const overBudget = budget && timing.total > budget;
 
@@ -3006,6 +3026,7 @@ function PathPilot() {
   const pathPayload = () => ({
     app: "PathPilot", formatVersion: 2, seasonId: season.id, seasonName: `${season.name} ${season.years}`,
     alliance, robotSize, robotLength, robotWidth, motion, startPose, startPreset,
+    startAction, startActionParams,
     waypoints: waypoints.map(({ id, ...r }) => r), exportedAt: new Date().toISOString(),
   });
   const exportPath = () => openExport("Save path", `pathpilot-${season.id}-${alliance}.json`, pathPayload());
@@ -3023,6 +3044,9 @@ function PathPilot() {
         setRobotWidth(d.robotWidth || d.robotSize || 18);
         if (d.motion) setMotion({ ...DEFAULT_MOTION, ...d.motion });
         setStartPreset(d.startPreset || "custom"); setStartPose(d.startPose);
+        // Paths saved before start actions existed simply have none.
+        setStartAction(d.startAction || "none");
+        setStartActionParams(d.startActionParams || {});
         setWaypoints((d.waypoints || []).map(w => ({ ...w, id: nextId() })));
         setSelection({ type: "start" });
         setNotice({ bad: false, msg: `Loaded ${(d.waypoints || []).length} waypoints.` });
@@ -3183,6 +3207,7 @@ function PathPilot() {
   const generateCode = () => generateOpMode({
     className: opModeClassName,
     season, alliance, startPose, waypoints, motion, profile, timing,
+    startAction, startActionParams,
   });
 
   /* ---- render helpers ---- */
@@ -3336,12 +3361,14 @@ function PathPilot() {
   const selectedWp = selection.type === "wp" ? waypoints.find(w => w.id === selection.id) : null;
   const selIdx = selectedWp ? waypoints.findIndex(w => w.id === selectedWp.id) : -1;
 
-  const renderActionParams = (wp) => {
-    const def = season.actions.find(a => a.id === wp.action);
+  /* Takes the action and its params rather than a waypoint, so the start can use
+   * the same editor — its params live in their own state, not in the list. */
+  const renderActionParams = (action, params, setParams, where) => {
+    const def = season.actions.find(a => a.id === action);
     if (!def || !def.params) return null;
-    const set = (k, v) => updateWaypoint(wp.id, "actionParams", { ...wp.actionParams, [k]: v });
+    const set = (k, v) => setParams({ ...params, [k]: v });
     return def.params.map(p => {
-      const cur = wp.actionParams[p.key] !== undefined ? wp.actionParams[p.key]
+      const cur = params[p.key] !== undefined ? params[p.key]
         : (p.default === "@myTag" ? A.tag : p.default);
       if (p.type === "tagId") return (
         <div key={p.key} style={{ marginBottom: "10px" }}>
@@ -3373,7 +3400,7 @@ function PathPilot() {
           </select>
           {isEmpty && (
             <div style={{ fontSize: "11px", color: "#FBBF24", marginTop: "4px", lineHeight: 1.5 }}>
-              ⚠ "{chosen.name}" has no steps in BotBuilder, so this waypoint will arrive and do nothing.
+              ⚠ "{chosen.name}" has no steps in BotBuilder, so {where === "start" ? "this will do nothing at the start" : "this waypoint will arrive and do nothing"}.
             </div>
           )}
         </div>
@@ -3632,6 +3659,27 @@ function PathPilot() {
                 </div>
                 <label style={LB}>Heading (0 = away from audience)</label>
                 <HeadingField value={startPose.heading} onChange={(v) => updateStart("heading", v)} IN={IN} />
+
+                {/* Runs after START is pressed and before the robot moves, so a
+                  * launcher can be spinning up while the first leg is driven. */}
+                <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #3f3f46" }}>
+                  <label style={LB}>Action at start (before moving)</label>
+                  <select value={startAction} style={IN}
+                          onChange={(e) => { setStartAction(e.target.value); setStartActionParams({}); }}>
+                    {visibleActions.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+                  </select>
+                  <div style={{ marginTop: "10px" }}>
+                    {renderActionParams(startAction, startActionParams, setStartActionParams, "start")}
+                  </div>
+                  {startAction !== "none" && (
+                    <div style={{ fontSize: "11px", color: "#71717a", lineHeight: 1.5 }}>
+                      Runs once the match starts, before the first leg
+                      {timing.start > 0 ? ` — about ${timing.start.toFixed(1)}s` : ""}.
+                      A latching macro keeps running as the robot drives; anything
+                      else holds the path until it finishes.
+                    </div>
+                  )}
+                </div>
               </div>
 
               {selectedWp && (
@@ -3659,7 +3707,8 @@ function PathPilot() {
                       {visibleActions.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
                     </select>
                   </div>
-                  {renderActionParams(selectedWp)}
+                  {renderActionParams(selectedWp.action, selectedWp.actionParams,
+                    (v) => updateWaypoint(selectedWp.id, "actionParams", v), "waypoint")}
                   <div style={{ fontSize: "11px", color: "#71717a", marginBottom: "8px" }}>
                     Leg ≈ {timing.legs[selIdx] ? timing.legs[selIdx].move.toFixed(1) : "0.0"}s
                     {timing.legs[selIdx] && timing.legs[selIdx].action > 0 ? ` + ${timing.legs[selIdx].action.toFixed(1)}s action` : ""}
@@ -3729,8 +3778,15 @@ function PathPilot() {
                   <td style={{ padding: "8px 4px" }}><input type="number" step="0.5" value={startPose.x} onClick={(e) => e.stopPropagation()} onChange={(e) => updateStart("x", clamp(Number(e.target.value)))} style={{ ...IN, width: "64px" }} /></td>
                   <td style={{ padding: "8px 4px" }}><input type="number" step="0.5" value={startPose.y} onClick={(e) => e.stopPropagation()} onChange={(e) => updateStart("y", clamp(Number(e.target.value)))} style={{ ...IN, width: "64px" }} /></td>
                   <td style={{ padding: "8px 4px" }}><input type="number" step="1" min="0" max="359" value={startPose.heading} onClick={(e) => e.stopPropagation()} onChange={(e) => updateStart("heading", Number(e.target.value))} style={{ ...IN, width: "58px" }} /></td>
-                  <td style={{ padding: "8px 4px", color: startLegal ? "#a1a1aa" : "#f87171", fontSize: "12px" }}>{startLegal ? "Starting position" : startIssues[0]}</td>
-                  <td style={{ padding: "8px 4px", color: "#71717a", fontSize: "12px" }}>0.0s</td>
+                  <td style={{ padding: "8px 4px" }}>
+                    <select value={startAction} onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => { setStartAction(e.target.value); setStartActionParams({}); }}
+                            title={startLegal ? "Runs before the first leg" : startIssues[0]}
+                            style={{ ...IN, width: "148px" }}>
+                      {visibleActions.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ padding: "8px 4px", color: "#71717a", fontSize: "12px" }}>{(timing.start || 0).toFixed(1)}s</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#71717a", fontSize: "11px" }}>locked</td>
                 </tr>
                 {waypoints.map((wp, i) => {
@@ -3845,11 +3901,12 @@ function PathPilot() {
                 <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Timing check</div>
                 <div style={{ fontSize: "13px", lineHeight: 1.8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}><span>Legs</span><strong>{timing.legs.reduce((a, l) => a + l.move, 0).toFixed(1)}s</strong></div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>Actions</span><strong>{timing.legs.reduce((a, l) => a + l.action, 0).toFixed(1)}s</strong></div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>Actions</span><strong>{(timing.legs.reduce((a, l) => a + l.action, 0) + (timing.start || 0)).toFixed(1)}s</strong></div>
                   {(() => {
                     // Without a profile a macro's real duration is unknown, and the
                     // season's flat estimate will usually be short.
-                    const guessed = waypoints.filter(w => w.action === "macro" &&
+                    const guessed = [{ action: startAction, actionParams: startActionParams }, ...waypoints]
+                      .filter(w => w.action === "macro" &&
                       !(profile && profile.macros && profile.macros.some(m => m.method === (w.actionParams || {}).macroMethod))).length;
                     return guessed > 0 ? (
                       <div style={{ fontSize: "11px", color: "#FBBF24", marginTop: "4px", lineHeight: 1.5 }}>
