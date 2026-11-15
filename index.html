@@ -3056,10 +3056,115 @@ function PathPilot() {
    * offers copy/paste as well. Same data either way. */
   const [transfer, setTransfer] = useState(null);
 
+  /* pathName is declared above, next to the other editor state — it already
+   * names the generated OpMode. It now also names the download and the saved
+   * entry, so one name covers all three and a reopened path keeps its OpMode
+   * name instead of reverting to "Auto". */
+  const [libOpen, setLibOpen] = useState(false);
+  const [library, setLibrary] = useState({});
+  /* Set when a path has been opened from, or saved to, a real file. Keeping it
+   * lets a later save overwrite that same file instead of making another copy —
+   * which is the whole point when the file lives in a synced folder. */
+  const fileHandle = useRef(null);
+  const [fileLabel, setFileLabel] = useState("");
+
+  const LIB_KEY = "pathpilot.library.v1";
+  /* Browser storage can be absent, full, or disabled outright, and none of that
+   * should take the editor down with it. */
+  const libRead = () => {
+    try { return JSON.parse(localStorage.getItem(LIB_KEY) || "{}"); } catch { return {}; }
+  };
+  const libCommit = (next) => {
+    try {
+      localStorage.setItem(LIB_KEY, JSON.stringify(next));
+      setLibrary(next);
+      return true;
+    } catch {
+      setNotice({ bad: true, msg: "Browser storage is full or blocked — use Download instead." });
+      return false;
+    }
+  };
+  useEffect(() => { setLibrary(libRead()); }, []);
+
+  const slug = (t) => (t || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const pathFileName = () => {
+    const n = slug(pathName);
+    // "Auto" is the untouched default and says nothing, so fall back to the
+    // descriptive name rather than writing auto.json every time.
+    return (!n || n === "auto") ? `pathpilot-${season.id}-${alliance}.json` : `${n}.json`;
+  };
+
+  const saveToLibrary = (name) => {
+    const nm = (name || "").trim();
+    if (!nm) return setNotice({ bad: true, msg: "Give the path a name first." });
+    const next = { ...library };
+    // Same name overwrites, which is what "save" means once a path is named.
+    const existing = Object.values(next).find(e => e.name.toLowerCase() === nm.toLowerCase());
+    const id = existing ? existing.id : `p${Date.now().toString(36)}`;
+    next[id] = { id, name: nm, seasonId: season.id, alliance,
+                 waypoints: waypoints.length, savedAt: new Date().toISOString(),
+                 payload: { ...pathPayload(), name: nm } };
+    if (libCommit(next)) {
+      setPathName(nm);
+      setNotice({ bad: false, msg: `Saved "${nm}"${existing ? " (replaced)" : ""}.` });
+    }
+  };
+  const deleteFromLibrary = (id) => {
+    const next = { ...library }; const nm = next[id] && next[id].name;
+    delete next[id];
+    if (libCommit(next)) setNotice({ bad: false, msg: `Deleted "${nm}".` });
+  };
+
   const openExport = (title, filename, obj) =>
     setTransfer({ mode: "export", title, filename, text: JSON.stringify(obj, null, 2) });
   const openImport = (title, onLoad) =>
     setTransfer({ mode: "import", title, text: "", onLoad });
+
+  /* Chrome and Edge can hand the page a real file, which is what makes saving
+   * into a synced folder work: pick it once, then overwrite the same file on
+   * every later save rather than piling up copies in Downloads. Firefox and
+   * Safari have no such API, so the plain download stays as the fallback. */
+  const canPick = typeof window !== "undefined" && !!window.showSaveFilePicker;
+
+  const writeHandle = async (handle, text) => {
+    const w = await handle.createWritable();
+    await w.write(text); await w.close();
+  };
+
+  const saveToFile = async (text, suggestedName, reuse) => {
+    try {
+      let h = reuse ? fileHandle.current : null;
+      if (!h) {
+        h = await window.showSaveFilePicker({
+          suggestedName,
+          types: [{ description: "PathPilot path", accept: { "application/json": [".json"] } }],
+        });
+      }
+      await writeHandle(h, text);
+      fileHandle.current = h; setFileLabel(h.name);
+      setNotice({ bad: false, msg: `Saved to ${h.name}.` });
+      return true;
+    } catch (e) {
+      // An abort is the person closing the dialog, which needs no message.
+      if (e && e.name === "AbortError") return false;
+      setNotice({ bad: true, msg: "Could not write that file — use Download instead." });
+      return false;
+    }
+  };
+
+  const openFromFile = async () => {
+    try {
+      const [h] = await window.showOpenFilePicker({
+        types: [{ description: "PathPilot path", accept: { "application/json": [".json"] } }],
+      });
+      const text = await (await h.getFile()).text();
+      fileHandle.current = h; setFileLabel(h.name);
+      setTransfer(null);
+      loadPathText(text);
+    } catch (e) {
+      if (!e || e.name !== "AbortError") setNotice({ bad: true, msg: "Could not read that file." });
+    }
+  };
 
   const download = (obj, name) => {
     const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
@@ -3068,12 +3173,13 @@ function PathPilot() {
     URL.revokeObjectURL(a.href);
   };
   const pathPayload = () => ({
-    app: "PathPilot", formatVersion: 2, seasonId: season.id, seasonName: `${season.name} ${season.years}`,
+    app: "PathPilot", formatVersion: 2, name: pathName || "",
+    seasonId: season.id, seasonName: `${season.name} ${season.years}`,
     alliance, robotSize, robotLength, robotWidth, motion, startPose, startPreset,
     startAction, startActionParams,
     waypoints: waypoints.map(({ id, ...r }) => r), exportedAt: new Date().toISOString(),
   });
-  const exportPath = () => openExport("Save path", `pathpilot-${season.id}-${alliance}.json`, pathPayload());
+  const exportPath = () => openExport("Save path", pathFileName(), pathPayload());
 
   const exportPack = () => openExport("Season pack", `season-${season.id}.json`, season.dsl);
 
@@ -3087,6 +3193,7 @@ function PathPilot() {
         setRobotLength(d.robotLength || d.robotSize || 18);
         setRobotWidth(d.robotWidth || d.robotSize || 18);
         if (d.motion) setMotion({ ...DEFAULT_MOTION, ...d.motion });
+        setPathName(d.name || "Auto");
         setStartPreset(d.startPreset || "custom"); setStartPose(d.startPose);
         // Paths saved before start actions existed simply have none.
         setStartAction(d.startAction || "none");
@@ -3492,6 +3599,15 @@ function PathPilot() {
               {alliance === "blue" ? "🔵" : "🔴"} {A.label}
             </button>
             <button onClick={mirrorPath} style={BTN} title="Flip the path to the other alliance">⇄ Mirror</button>
+            <input value={pathName} onChange={(e) => setPathName(e.target.value)}
+                   placeholder="untitled path"
+                   title={fileLabel ? `Last file: ${fileLabel}` : "Name this path — used for the filename and the saved list"}
+                   style={{ ...IN, width: "150px", fontSize: "12px", padding: "6px 9px",
+                            borderColor: pathName ? "#3f3f46" : "#52525b",
+                            fontStyle: pathName ? "normal" : "italic" }} />
+            <button onClick={() => setLibOpen(true)} style={BTN} title="Saved paths on this browser">
+              📚 Paths{Object.keys(library).length ? ` (${Object.keys(library).length})` : ""}
+            </button>
             <button onClick={exportPath} style={BTN} title="Save this path as JSON">💾 Save path</button>
             <button onClick={() => openImport("Open path", loadPathText)} style={BTN} title="Load a saved path">📂 Open path</button>
             <button onClick={() => openImport("Load robot profile", loadProfileText)}
@@ -3520,6 +3636,64 @@ function PathPilot() {
                   ? "The file goes into the box behind this."
                   : "Path, robot profile, season pack, or a Robot Controller log —\nPathPilot works out which from the file itself."}
               </div>
+            </div>
+          </div>
+        )}
+
+        {libOpen && (
+          <div onClick={() => setLibOpen(false)}
+               style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 50,
+                        display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+            <div onClick={(e) => e.stopPropagation()}
+                 style={{ ...CARD, width: "560px", maxWidth: "100%", maxHeight: "80vh", overflow: "auto",
+                          display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <strong style={{ fontSize: "14px" }}>Saved paths</strong>
+                <button onClick={() => setLibOpen(false)} style={BTN}>✕</button>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input value={pathName} onChange={(e) => setPathName(e.target.value)}
+                       placeholder="name this path" style={{ ...IN, flex: 1 }} />
+                <button onClick={() => saveToLibrary(pathName)}
+                        disabled={!pathName.trim()}
+                        style={{ ...BTN, borderColor: "#065F46", color: "#6EE7B7",
+                                 opacity: pathName.trim() ? 1 : 0.4 }}>💾 Save</button>
+              </div>
+              {Object.keys(library).length === 0 ? (
+                <div style={{ fontSize: "12px", color: "#71717a", padding: "10px 0", lineHeight: 1.6 }}>
+                  Nothing saved yet. Name the path above and save it — it stays in this
+                  browser, so it is instant and works with no network. It does not follow
+                  you to another machine and a browser data clear removes it, so keep
+                  anything you care about as a file too.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {Object.values(library)
+                    .sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""))
+                    .map(e => {
+                      const otherSeason = e.seasonId !== season.id;
+                      return (
+                        <div key={e.id} style={{ display: "flex", alignItems: "center", gap: "8px",
+                                                 padding: "8px", border: "1px solid #3f3f46", borderRadius: "6px",
+                                                 background: e.name === pathName ? "rgba(16,185,129,0.10)" : "transparent" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "13px", fontWeight: 500 }}>{e.name}</div>
+                            <div style={{ fontSize: "11px", color: "#71717a" }}>
+                              {e.alliance === "blue" ? "🔵" : "🔴"} {e.waypoints} waypoints · {new Date(e.savedAt).toLocaleString()}
+                              {otherSeason ? ` · ${e.seasonId}` : ""}
+                            </div>
+                          </div>
+                          <button onClick={() => { setLibOpen(false); loadPathText(JSON.stringify(e.payload)); }}
+                                  disabled={otherSeason}
+                                  title={otherSeason ? `Saved for ${e.seasonId} — switch season first` : "Open this path"}
+                                  style={{ ...BTN, opacity: otherSeason ? 0.4 : 1 }}>Open</button>
+                          <button onClick={() => deleteFromLibrary(e.id)}
+                                  style={{ ...BTN, color: "#f87171", borderColor: "#7f1d1d" }}>×</button>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -3562,6 +3736,17 @@ function PathPilot() {
                         setNotice({ bad: true, msg: "Download blocked here — use Copy instead." });
                       }
                     }} style={BTN}>⬇ Download</button>
+                    {canPick && transfer.title === "Save path" && (
+                      <>
+                        {fileHandle.current && (
+                          <button onClick={() => saveToFile(transfer.text, transfer.filename, true)}
+                                  title={`Overwrite ${fileLabel}`}
+                                  style={{ ...BTN, borderColor: "#065F46", color: "#6EE7B7" }}>💾 Save to {fileLabel}</button>
+                        )}
+                        <button onClick={() => saveToFile(transfer.text, transfer.filename, false)}
+                                style={{ ...BTN, borderColor: "#1D4ED8", color: "#93C5FD" }}>📁 Save as…</button>
+                      </>
+                    )}
                   </div>
                 </>
               ) : (
@@ -3588,6 +3773,12 @@ function PathPilot() {
                                e.target.value = "";
                              }} />
                     </label>
+                    {canPick && transfer.title === "Open path" && (
+                      <button onClick={openFromFile} style={{ ...BTN, borderColor: "#1D4ED8", color: "#93C5FD" }}
+                              title="Opens it and remembers the file, so later saves go back to it">
+                        📂 Open file…
+                      </button>
+                    )}
                     <span style={{ display: "flex", gap: "8px" }}>
                       <button onClick={() => setTransfer(null)} style={BTN}>Cancel</button>
                       <button disabled={!transfer.text.trim()}
