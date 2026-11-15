@@ -544,8 +544,13 @@ const estimatePath = (startPose, waypoints, motion, season, profile, startAction
     // The profile carries each macro's real duration; without one the season's
     // flat estimate is all there is.
     const act = season.actionDuration(wp.action, wp.actionParams || {}, profile);
-    legs.push({ id: wp.id, move, action: act, cumulative: total + move + act });
-    total += move + act;
+    /* A departure action's cost is whatever it blocks for, and blocking time is
+     * serial — there is no concurrency to hide it in. BotBuilder already reports
+     * 0 for its no-wait steps, so the overlap is accounted for there, and
+     * subtracting the leg here as well would count it twice. */
+    const dep = season.actionDuration(wp.departAction || "none", wp.departActionParams || {}, profile);
+    legs.push({ id: wp.id, move, action: act, depart: dep, cumulative: total + move + act + dep });
+    total += move + act + dep;
     prev = wp;
   });
   return { legs, total, start: startAct };
@@ -1835,8 +1840,12 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   const pipeline = (profile && profile.limelight && profile.limelight.pipeline) || 0;
 
   // Only the macros this path actually calls get emitted.
+  // Arrival and departure slots both reach macros, and a macro used only at a
+  // departure still has to be emitted as a method.
   const usedMethods = new Set(
-    [{ action: startAction, actionParams: startActionParams }, ...waypoints]
+    [{ action: startAction, actionParams: startActionParams },
+     ...waypoints,
+     ...waypoints.map(w => ({ action: w.departAction, actionParams: w.departActionParams }))]
       .filter(w => w.action === "macro" && w.actionParams && w.actionParams.macroMethod)
       .map(w => w.actionParams.macroMethod));
   const allMacros = (profile && profile.macros) || [];
@@ -1851,6 +1860,29 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     (m.java.servos || []).forEach(x => macroServos.add(x));
     if (m.java.usesBlinkin) macroBlinkin = true;
     (m.java.patterns || []).forEach(p => macroPatterns.set(p.constant, p.value));
+  });
+
+  /* Mechanism motors keep the behaviour set in BotBuilder, so an arm that holds
+   * position in TeleOp holds it here too. Built here rather than inside
+   * initHardware because finish() is emitted first and needs the encoder map. */
+  const auxZeroPower = {}, auxRunMode = {}, auxReversed = {};
+  const auxHasEncoder = {}, auxPIDF = {};
+  ((profile && profile.auxMotors) || []).forEach(a => {
+    if (!a.hardwareName) return;
+    auxZeroPower[a.hardwareName] = a.zeroPower || "FLOAT";
+    // A motor whose encoder port is taken by an odometry pod, or that has no
+    // encoder at all, cannot run closed-loop. BotBuilder already worked that out
+    // and stored the answer in runMode; forcing RUN_USING_ENCODER here gave a
+    // motor that barely turned. hasEncoder is the fallback when runMode is absent
+    // in an older profile.
+    auxRunMode[a.hardwareName] = a.runMode
+      || (a.hasEncoder === false ? "RUN_WITHOUT_ENCODER" : "RUN_USING_ENCODER");
+    auxReversed[a.hardwareName] = !!a.reversed;
+    auxHasEncoder[a.hardwareName] =
+      a.hasEncoder !== undefined ? !!a.hasEncoder
+                                 : auxRunMode[a.hardwareName] === "RUN_USING_ENCODER";
+    const k = a.velocityPIDF;
+    if (k && [k.p, k.i, k.d, k.f].every(v => typeof v === "number")) auxPIDF[a.hardwareName] = k;
   });
 
   const usesVision = waypoints.some(w => ["faceTag", "driveToTag", "readMotif"].includes(w.action));
@@ -2071,6 +2103,15 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     P(`        // Waypoint ${i + 1} — (${wp.x.toFixed(1)}, ${wp.y.toFixed(1)}) @ ${wp.heading}deg  [~${leg.move.toFixed(1)}s]`);
     P(`        if (!driveTo(${wp.x.toFixed(1)}, ${wp.y.toFixed(1)}, ${wp.heading})) { finish(); return; }`);
     season.renderEmit(wp.action, wp.actionParams || {}, ctx).forEach(line => P(`        ${line}`));
+    /* Runs as the robot leaves, before the next leg's driveTo. A macro built
+     * from no-wait steps returns in a millisecond, so a flywheel spins up or a
+     * servo travels while the robot drives the following leg. The start pose's
+     * own departure action is startAction, emitted above. */
+    const depart = season.renderEmit(wp.departAction || "none", wp.departActionParams || {}, ctx);
+    if (depart.length) {
+      P(`        // leaving waypoint ${i + 1}  [~${(leg.depart || 0).toFixed(1)}s]`);
+      depart.forEach(line => P(`        ${line}`));
+    }
     P("");
   });
 
@@ -2167,6 +2208,19 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   P("    /** Stops everything and reports. Called on completion or on a failed leg. */",
     "    private void finish() {",
     "        stopDrive();");
+  /* A latching motor_on, or a no-wait velocity step at a departure, keeps its
+   * motor running after this returns — including after a RUNAWAY or TIMEOUT
+   * abort, which would leave a shooter at speed for the rest of the period.
+   * Only the motors initHardware actually declared exist as fields, and
+   * setVelocity needs an encoder, so the encoderless ones get setPower alone. */
+  const stopList = Array.from(macroMotors);
+  if (stopList.length) {
+    P("        // Anything a macro left running stops here too.");
+    stopList.forEach(m => {
+      if (auxHasEncoder[m]) P(`        ${m}.setVelocity(0);`);
+      P(`        ${m}.setPower(0);`);
+    });
+  }
   if (needLimelight) P("        if (limelight != null) limelight.stop();");
   P('        telemetry.addLine(aborted ? "PATH ABORTED - see the reason above" : "Path complete");',
     '        telemetry.addData("final pose", "%.1f, %.1f @ %.0f", poseX, poseY, poseHeading);',
@@ -2213,23 +2267,6 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     `                RevHubOrientationOnRobot.UsbFacingDirection.${(profile && profile.imu && profile.imu.usbDirection) || "FORWARD"})));`,
     "        imu.resetYaw();",
     "");
-  // Mechanism motors keep the behaviour set in BotBuilder, so an arm that holds
-  // position in TeleOp holds it here too.
-  const auxZeroPower = {};
-  const auxRunMode = {};
-  const auxReversed = {};
-  ((profile && profile.auxMotors) || []).forEach(a => {
-    if (!a.hardwareName) return;
-    auxZeroPower[a.hardwareName] = a.zeroPower || "FLOAT";
-    // A motor whose encoder port is taken by an odometry pod, or that has no
-    // encoder at all, cannot run closed-loop. BotBuilder already worked that out
-    // and stored the answer in runMode; forcing RUN_USING_ENCODER here gave a
-    // motor that barely turned. hasEncoder is the fallback when runMode is absent
-    // in an older profile.
-    auxRunMode[a.hardwareName] = a.runMode
-      || (a.hasEncoder === false ? "RUN_WITHOUT_ENCODER" : "RUN_USING_ENCODER");
-    auxReversed[a.hardwareName] = !!a.reversed;
-  });
   Array.from(macroMotors).forEach(m => {
     P(`        ${m} = hardwareMap.get(DcMotorEx.class, "${m}");`);
     // The macro bodies BotBuilder generated assume the direction set in the
@@ -2238,6 +2275,10 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     P(`        ${m}.setDirection(DcMotorSimple.Direction.${auxReversed[m] ? "REVERSE" : "FORWARD"});`);
     P(`        ${m}.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.${auxZeroPower[m] || "FLOAT"});`);
     P(`        ${m}.setMode(DcMotor.RunMode.${auxRunMode[m] || "RUN_USING_ENCODER"});`);
+    // setMode resets the velocity coefficients to that mode's defaults, so the
+    // tuned ones have to go on afterwards, never before.
+    const k = auxPIDF[m];
+    if (k) P(`        ${m}.setVelocityPIDFCoefficients(${k.p}, ${k.i}, ${k.d}, ${k.f});`);
   });
   Array.from(macroServos).forEach(m => P(`        ${m} = hardwareMap.get(Servo.class, "${m}");`));
   if (macroBlinkin) P('        blinkin = hardwareMap.get(Servo.class, "blinkin");');
@@ -2889,7 +2930,8 @@ function PathPilot() {
     const { x: sx, y: sy } = svgCoords(e);
     const f = toField(sx, sy);
     if (f.x < 0 || f.x > FIELD || f.y < 0 || f.y > FIELD) return;
-    const wp = { id: nextId(), x: clamp(f.x), y: clamp(f.y), heading: 0, action: "none", actionParams: {} };
+    const wp = { id: nextId(), x: clamp(f.x), y: clamp(f.y), heading: 0, action: "none", actionParams: {},
+                 departAction: "none", departActionParams: {} };
     if (insertAfter !== null) {
       setWaypoints(wps => { const c = [...wps]; c.splice(insertAfter + 1, 0, wp); return c; });
       setInsertAfter(null);
@@ -2959,7 +3001,9 @@ function PathPilot() {
     setWaypoints(wps => wps.map(wp => {
       const m = M.point(wp.x, wp.y);
       return { ...wp, x: clamp(m.x), y: clamp(m.y), heading: M.heading(wp.heading),
-        actionParams: wp.actionParams.tagId ? { ...wp.actionParams, tagId: M.tag(wp.actionParams.tagId) } : wp.actionParams };
+        actionParams: wp.actionParams.tagId ? { ...wp.actionParams, tagId: M.tag(wp.actionParams.tagId) } : wp.actionParams,
+        departActionParams: (wp.departActionParams && wp.departActionParams.tagId)
+          ? { ...wp.departActionParams, tagId: M.tag(wp.departActionParams.tagId) } : wp.departActionParams };
     }));
     setAlliance(opponent); setStartPreset("custom");
   };
@@ -3047,7 +3091,8 @@ function PathPilot() {
         // Paths saved before start actions existed simply have none.
         setStartAction(d.startAction || "none");
         setStartActionParams(d.startActionParams || {});
-        setWaypoints((d.waypoints || []).map(w => ({ ...w, id: nextId() })));
+        setWaypoints((d.waypoints || []).map(w => ({
+          departAction: "none", departActionParams: {}, ...w, id: nextId() })));
         setSelection({ type: "start" });
         setNotice({ bad: false, msg: `Loaded ${(d.waypoints || []).length} waypoints.` });
       } catch { setNotice({ bad: true, msg: "That is not valid JSON." }); }
@@ -3400,7 +3445,9 @@ function PathPilot() {
           </select>
           {isEmpty && (
             <div style={{ fontSize: "11px", color: "#FBBF24", marginTop: "4px", lineHeight: 1.5 }}>
-              ⚠ "{chosen.name}" has no steps in BotBuilder, so {where === "start" ? "this will do nothing at the start" : "this waypoint will arrive and do nothing"}.
+              ⚠ "{chosen.name}" has no steps in BotBuilder, so {where === "start" ? "this will do nothing at the start"
+                    : where === "departure" ? "nothing will happen as the robot leaves"
+                    : "this waypoint will arrive and do nothing"}.
             </div>
           )}
         </div>
@@ -3709,9 +3756,33 @@ function PathPilot() {
                   </div>
                   {renderActionParams(selectedWp.action, selectedWp.actionParams,
                     (v) => updateWaypoint(selectedWp.id, "actionParams", v), "waypoint")}
-                  <div style={{ fontSize: "11px", color: "#71717a", marginBottom: "8px" }}>
+
+                  {/* Fires as the robot leaves, before the next leg. A macro of
+                    * no-wait steps costs nothing and keeps working while driving. */}
+                  <div style={{ marginTop: "4px", paddingTop: "10px", borderTop: "1px solid #3f3f46" }}>
+                    <label style={LB}>On departure (as it leaves, before the next leg)</label>
+                    <select value={selectedWp.departAction || "none"} style={IN}
+                            onChange={(e) => { updateWaypoint(selectedWp.id, "departAction", e.target.value);
+                                               updateWaypoint(selectedWp.id, "departActionParams", {}); }}>
+                      {visibleActions.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+                    </select>
+                    <div style={{ marginTop: "10px" }}>
+                      {renderActionParams(selectedWp.departAction || "none", selectedWp.departActionParams || {},
+                        (v) => updateWaypoint(selectedWp.id, "departActionParams", v), "departure")}
+                    </div>
+                    {(selectedWp.departAction && selectedWp.departAction !== "none") && (
+                      <div style={{ fontSize: "11px", color: "#71717a", lineHeight: 1.5, marginBottom: "4px" }}>
+                        {timing.legs[selIdx] && timing.legs[selIdx].depart > 0
+                          ? `Blocks for about ${timing.legs[selIdx].depart.toFixed(1)}s before the next leg starts.`
+                          : "Returns immediately — the hardware keeps working while the robot drives on."}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: "11px", color: "#71717a", marginBottom: "8px", marginTop: "8px" }}>
                     Leg ≈ {timing.legs[selIdx] ? timing.legs[selIdx].move.toFixed(1) : "0.0"}s
                     {timing.legs[selIdx] && timing.legs[selIdx].action > 0 ? ` + ${timing.legs[selIdx].action.toFixed(1)}s action` : ""}
+                    {timing.legs[selIdx] && timing.legs[selIdx].depart > 0 ? ` + ${timing.legs[selIdx].depart.toFixed(1)}s depart` : ""}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
                     <button onClick={() => setInsertAfter(selIdx)} style={{ ...BTN, fontSize: "11px" }}>➕ Insert after</button>
@@ -3768,7 +3839,7 @@ function PathPilot() {
             <table style={{ width: "100%", minWidth: "660px", fontSize: "13px", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #3f3f46" }}>
-                  {["#", "X", "Y", "Heading", "Action", "Time"].map(h => <th key={h} style={{ textAlign: "left", padding: "8px 4px", fontWeight: 500 }}>{h}</th>)}
+                  {["#", "X", "Y", "Heading", "Action", "On departure", "Time"].map(h => <th key={h} style={{ textAlign: "left", padding: "8px 4px", fontWeight: 500 }}>{h}</th>)}
                   <th style={{ textAlign: "right", padding: "8px 4px", fontWeight: 500, whiteSpace: "nowrap" }}>Edit</th>
                 </tr>
               </thead>
@@ -3786,6 +3857,7 @@ function PathPilot() {
                       {visibleActions.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
                     </select>
                   </td>
+                  <td style={{ padding: "8px 4px", color: "#52525b", fontSize: "11px" }}>—</td>
                   <td style={{ padding: "8px 4px", color: "#71717a", fontSize: "12px" }}>{(timing.start || 0).toFixed(1)}s</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#71717a", fontSize: "11px" }}>locked</td>
                 </tr>
@@ -3805,7 +3877,16 @@ function PathPilot() {
                           {visibleActions.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
                         </select>
                       </td>
-                      <td style={{ padding: "8px 4px", fontSize: "12px", color: "#a1a1aa" }}>{lg ? `${(lg.move + lg.action).toFixed(1)}s` : "-"}</td>
+                      <td style={{ padding: "8px 4px" }}>
+                        <select value={wp.departAction || "none"} onClick={(e) => e.stopPropagation()}
+                                title="Runs as the robot leaves, before the next leg"
+                                onChange={(e) => { updateWaypoint(wp.id, "departAction", e.target.value);
+                                                   updateWaypoint(wp.id, "departActionParams", {}); }}
+                                style={{ ...IN, width: "148px" }}>
+                          {visibleActions.map(a => <option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "8px 4px", fontSize: "12px", color: "#a1a1aa" }}>{lg ? `${(lg.move + lg.action + (lg.depart || 0)).toFixed(1)}s` : "-"}</td>
                       <td style={{ padding: "8px 4px", textAlign: "right", whiteSpace: "nowrap", width: "1%" }}>
                         <button onClick={(e) => { e.stopPropagation(); moveWaypoint(i, -1); }} disabled={i === 0} style={{ ...BTN, padding: "2px 7px", marginRight: "3px", opacity: i === 0 ? 0.4 : 1 }}>↑</button>
                         <button onClick={(e) => { e.stopPropagation(); moveWaypoint(i, 1); }} disabled={i === waypoints.length - 1} style={{ ...BTN, padding: "2px 7px", marginRight: "3px", opacity: i === waypoints.length - 1 ? 0.4 : 1 }}>↓</button>
@@ -3901,11 +3982,13 @@ function PathPilot() {
                 <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Timing check</div>
                 <div style={{ fontSize: "13px", lineHeight: 1.8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}><span>Legs</span><strong>{timing.legs.reduce((a, l) => a + l.move, 0).toFixed(1)}s</strong></div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>Actions</span><strong>{(timing.legs.reduce((a, l) => a + l.action, 0) + (timing.start || 0)).toFixed(1)}s</strong></div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>Actions</span><strong>{(timing.legs.reduce((a, l) => a + l.action + (l.depart || 0), 0) + (timing.start || 0)).toFixed(1)}s</strong></div>
                   {(() => {
                     // Without a profile a macro's real duration is unknown, and the
                     // season's flat estimate will usually be short.
-                    const guessed = [{ action: startAction, actionParams: startActionParams }, ...waypoints]
+                    const guessed = [{ action: startAction, actionParams: startActionParams },
+                                     ...waypoints,
+                                     ...waypoints.map(w => ({ action: w.departAction, actionParams: w.departActionParams || {} }))]
                       .filter(w => w.action === "macro" &&
                       !(profile && profile.macros && profile.macros.some(m => m.method === (w.actionParams || {}).macroMethod))).length;
                     return guessed > 0 ? (
