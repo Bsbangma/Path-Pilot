@@ -1784,8 +1784,84 @@ const javaClassName = (s) => {
   return parts.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
 };
 
+/* ---------------- branches ----------------
+ * A branch hangs off a point in the path: point 0 is the start pose, point N is
+ * after waypoint N and its arrival action. Its rules are tried in order and the
+ * first whose condition holds wins; the fallback always runs. An arm is either
+ * another path's waypoints — which ends the auto, since it is an alternative —
+ * or "continue", which falls through to the rest of this path.
+ *
+ * Arms are resolved copies, not references. The editor pulls them out of the
+ * saved-path library when you pick one, so the file carries everything it needs
+ * and opens on any machine. */
+const branchAt = (branches, point) => (branches || []).find(b => b.point === point) || null;
+
+/* The IDs for a condition. The constant from the profile's clusterJava is used
+ * when its declaration can be found, because that is the same array TeleOp
+ * tests against; otherwise the IDs go in literally, which always compiles. */
+const clusterIdsExpr = (rule, profile) => {
+  if (rule.kind === "tagVisible") return `new int[] { ${rule.tagId} }`;
+  const lines = (profile && profile.javaHelpers && profile.javaHelpers.clusterJava) || [];
+  const re = new RegExp(`int\\[\\]\\s+(\\w+)\\s*=.*//.*"${rule.cluster}"`);
+  for (const ln of lines) { const m = ln.match(re); if (m) return m[1]; }
+  const c = ((profile && profile.clusters) || []).find(c => c.name === rule.cluster);
+  return c ? `new int[] { ${c.tagIds.join(", ")} }` : "new int[] { }";
+};
+
+/* Every condition compiles to one Java boolean. Adding a kind means a case
+ * here, a label below, and a control in the branch editor — nothing else in the
+ * emitter knows or cares what a rule is asking about. */
+const BRANCH_KINDS = ["clusterVisible", "tagVisible", "timeLeft", "gamepadChoice", "colorSeen"];
+
+const conditionExpr = (rule, profile, season) => {
+  switch (rule.kind) {
+    case "timeLeft":
+      return `timeLeft() >= ${Number(rule.seconds ?? 8)}`;
+    case "gamepadChoice":
+      return `"${rule.button || "x"}".equals(preMatchChoice)`;
+    case "colorSeen":
+      return `seesHue(${rule.sensor}, ${Number(rule.hue ?? 225)}, ${Number(rule.hueTol ?? 35)}, ` +
+             `${Number(rule.minSat ?? 0.3)}, ${Number(rule.minVal ?? 0)})`;
+    default:
+      return `sawTarget(${clusterIdsExpr(rule, profile)}, ${!!rule.upright}, ${Number(rule.timeoutS ?? 0.5)})`;
+  }
+};
+
+const ruleLabel = (rule) => {
+  switch (rule.kind) {
+    case "timeLeft": return `at least ${Number(rule.seconds ?? 8)}s of AUTO left`;
+    case "gamepadChoice": return `driver chose ${rule.button || "x"} before the match`;
+    case "colorSeen": return `${rule.sensor} sees hue ${Number(rule.hue ?? 225)}`;
+    case "tagVisible": return `tag ${rule.tagId} visible`;
+    default: return `"${rule.cluster}" visible`;
+  }
+};
+
+/* What a set of branches needs the OpMode to carry. */
+const branchNeeds = (branches) => {
+  const rules = (branches || []).flatMap(b => b.rules || []);
+  return {
+    vision: rules.some(r => r.kind === "clusterVisible" || r.kind === "tagVisible"),
+    clock: rules.some(r => r.kind === "timeLeft"),
+    gamepad: rules.some(r => r.kind === "gamepadChoice"),
+    colorSensors: [...new Set(rules.filter(r => r.kind === "colorSeen").map(r => r.sensor).filter(Boolean))],
+  };
+};
+
+/* Every arm's legs become a method, so the if/else chain stays readable however
+ * many waypoints an arm has. */
+const armMethodName = (name, used) => {
+  let base = "arm" + String(name || "path").replace(/[^A-Za-z0-9]+/g, " ").trim()
+    .split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
+  if (/^arm\d/.test(base)) base = "armP" + base.slice(3);
+  let n = base, i = 2;
+  while (used.has(n)) n = base + (i++);
+  used.add(n);
+  return n;
+};
+
 function generateOpMode({ className, season, alliance, startPose, waypoints, motion, profile, timing,
-                         startAction, startActionParams }) {
+                         startAction, startActionParams, branches }) {
   const A = season.alliances[alliance];
   const myTag = A.tag;
   const ctx = { myTag, alliance, season };
@@ -1886,7 +1962,14 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   });
 
   const usesVision = waypoints.some(w => ["faceTag", "driveToTag", "readMotif"].includes(w.action));
-  const needLimelight = hasLimelight && usesVision;
+  /* A branch condition needs the camera just as much as a tag action does, and
+   * without this the field, the imports and the init would all be skipped and
+   * the branch code would not compile. */
+  const hasBranch = (branches || []).length > 0;
+  const jh = (profile && profile.javaHelpers) || {};
+  const needs = branchNeeds(branches);
+  const sensorsById = Object.fromEntries(((profile && profile.sensors) || []).map(x => [x.hardwareName, x]));
+  const needLimelight = hasLimelight && (usesVision || needs.vision);
 
   const L = [];
   const P = (...lines) => lines.forEach(l => L.push(l));
@@ -1902,6 +1985,43 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "//",
       "// Either fit odometry and configure it in BotBuilder, or drive this routine",
       "// from TeleOp macros instead of a PathPilot path.",
+    ].join("\n");
+  }
+
+  /* A branch asks the camera a question. Without a camera there is no answer,
+   * and silently taking the fallback every time would look like working code. */
+  const profileHasLimelight = !!(profile && profile.limelight && profile.limelight.present);
+  if (needs.vision && !profileHasLimelight) {
+    return [
+      "// " + className + " cannot be generated.",
+      "//",
+      "// This path branches on what the camera can see, but the loaded robot",
+      "// profile has no Limelight (limelight.present = false).",
+      "//",
+      "// Enable the Limelight on BotBuilder's Limelight tab, re-export the profile,",
+      "// and load it here. The branch itself is already set up and will generate",
+      "// as soon as the profile knows about the camera.",
+    ].join("\n");
+  }
+  if (needs.vision && !jh.seeTarget) {
+    return [
+      "// " + className + " cannot be generated.",
+      "//",
+      "// The profile declares a Limelight but carries no javaHelpers.seeTarget, so",
+      "// there is nothing to test tag visibility with. Re-export the profile from a",
+      "// current BotBuilder.",
+    ].join("\n");
+  }
+  const missingSensors = needs.colorSensors.filter(n => !sensorsById[n]);
+  if (missingSensors.length || (needs.colorSensors.length && !jh.seesHue)) {
+    return [
+      "// " + className + " cannot be generated.",
+      "//",
+      missingSensors.length
+        ? `// A branch reads ${missingSensors.join(", ")}, which the loaded profile does not declare.`
+        : "// A branch reads a colour sensor, but the profile carries no javaHelpers.seesHue.",
+      "//",
+      "// Add the sensor on BotBuilder's Sensors tab and re-export the profile.",
     ].join("\n");
   }
 
@@ -1930,10 +2050,15 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   P("import com.qualcomm.robotcore.util.ElapsedTime;",
     "",
     "import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;");
-  if (needLimelight) {
-    P("import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;",
-      "import org.firstinspires.ftc.robotcore.external.navigation.Position;");
+  if (needs.colorSensors.length) {
+    P("import android.graphics.Color;",
+      "import com.qualcomm.robotcore.hardware.ColorSensor;",
+      "import com.qualcomm.robotcore.hardware.NormalizedColorSensor;",
+      "import com.qualcomm.robotcore.hardware.NormalizedRGBA;");
   }
+  if (needLimelight) P("import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;");
+  // Position is only named by seeTag, which only the tag actions need.
+  if (hasLimelight && usesVision) P("import org.firstinspires.ftc.robotcore.external.navigation.Position;");
   if (needLimelight) P("", "import java.util.List;");
   P("");
 
@@ -2033,6 +2158,22 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "    private DcMotorEx parallelPod, perpendicularPod;",
     "    private IMU imu;");
   if (needLimelight) P("    private Limelight3A limelight;");
+  if (needs.gamepad) P('    /** Latched before START by a branch rule. */',
+                       '    private String preMatchChoice = "none";');
+  if (needs.clock) {
+    P("    /** Runs from START, so timeLeft() knows how much of AUTO is gone. */",
+      "    private final ElapsedTime autoClock = new ElapsedTime();",
+      `    private static final double AUTO_SECONDS = ${season.autoSeconds || 30}.0;`);
+  }
+  needs.colorSensors.forEach(n => {
+    const sd = sensorsById[n];
+    if (sd) P(`    private ${sd.javaType || "ColorSensor"} ${n};`);
+  });
+  /* seeTarget and its smoothing constants come from BotBuilder, so a branch
+   * tests visibility exactly the way TeleOp does. Pasted rather than rewritten
+   * for that reason — the two must not drift. */
+  if (hasBranch && jh.tagFields) P("", ...jh.tagFields);
+  if (hasBranch && jh.clusterJava) P("", ...jh.clusterJava);
   Array.from(macroMotors).forEach(m => P(`    private DcMotorEx ${m};`));
   Array.from(macroServos).forEach(m => P(`    private Servo ${m};`));
   if (macroBlinkin) P("    private Servo blinkin;");
@@ -2073,12 +2214,31 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     '        telemetry.addLine("PathPilot ready");',
     '        telemetry.addData("start", "%.1f, %.1f @ %.0f", START_X, START_Y, START_HEADING);');
   if (!calibrated) P('        telemetry.addLine("odometry NOT calibrated - positions approximate");');
-  P("        telemetry.update();",
-    "",
-    "        waitForStart();",
-    "        if (isStopRequested()) return;",
-    ...(motion.logRuns ? ["        logStart();"] : []),
-    "");
+  if (needs.gamepad) {
+    /* The only moment anyone can answer is before START. The last button pressed
+     * wins, and it is shown on the Driver Station so the drive team can see what
+     * the robot will do before the match begins. */
+    P('        telemetry.addLine("Pick an auto: A / B / X / Y, then press START");',
+      "        telemetry.update();",
+      "",
+      "        while (!isStarted() && !isStopRequested()) {",
+      '            if (gamepad1.a) preMatchChoice = "a";',
+      '            if (gamepad1.b) preMatchChoice = "b";',
+      '            if (gamepad1.x) preMatchChoice = "x";',
+      '            if (gamepad1.y) preMatchChoice = "y";',
+      '            telemetry.addData("auto", preMatchChoice);',
+      "            telemetry.update();",
+      "            idle();",
+      "        }",
+      "        if (isStopRequested()) return;");
+  } else {
+    P("        telemetry.update();",
+      "",
+      "        waitForStart();",
+      "        if (isStopRequested()) return;");
+  }
+  if (needs.clock) P("        autoClock.reset();");
+  P(...(motion.logRuns ? ["        logStart();"] : []), "");
   if (needLimelight) P("        if (limelight != null) limelight.start();", "");
 
   /* ---------------- the start action ----------------
@@ -2093,12 +2253,50 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     P("");
   }
 
+  /* Arm bodies become methods, collected here while the path is emitted and
+   * written out after runOpMode. */
+  const armMethods = [];
+  const usedArmNames = new Set();
+
+  const emitBranch = (br) => {
+    const arms = [...(br.rules || []).map((r, idx) => ({ rule: r, armIdx: idx + 1, arm: r.arm })),
+                  { rule: null, armIdx: 0, arm: br.fallbackArm }];
+    P(`        // ---- branch at ${br.point === 0 ? "the start" : `waypoint ${br.point}`} ----`);
+    arms.forEach(({ rule, armIdx, arm }, n) => {
+      const last = n === arms.length - 1;
+      const head = rule
+        ? `${n === 0 ? "        if" : "        } else if"} (${conditionExpr(rule, profile, season)}) {   // ${ruleLabel(rule)}`
+        : `        } else {   // otherwise`;
+      P(head);
+      P(`            line("BRANCH,${br.point},${armIdx}");`);
+      if (!arm || arm === "continue") {
+        P(`            // carries on with the rest of this path`);
+      } else {
+        const mName = armMethodName(arm.name, usedArmNames);
+        armMethods.push({ name: mName, arm });
+        // An arm that is another path is an alternative, so it ends the auto.
+        P(`            if (!${mName}()) { finish(); return; }`);
+        P(`            finish();`);
+        P(`            return;`);
+      }
+      if (last) P("        }", "");
+    });
+    // When no arm carries on, nothing after this branch can ever run — and Java
+    // would reject the unreachable legs, so they are left out and flagged.
+    return arms.some(a => !a.arm || a.arm === "continue");
+  };
+
   /* ---------------- the path ---------------- */
   P("        // ================= path =================");
   // Once a leg fails the pose is no longer trustworthy, and every later
   // waypoint is measured from a position the robot is not at. Continuing is
   // worse than stopping, so each leg gates the rest of the path.
+  let reachable = true;
+  const atStart = branchAt(branches, 0);
+  if (atStart) reachable = emitBranch(atStart);
+
   waypoints.forEach((wp, i) => {
+    if (!reachable) return;
     const leg = timing.legs[i];
     P(`        // Waypoint ${i + 1} — (${wp.x.toFixed(1)}, ${wp.y.toFixed(1)}) @ ${wp.heading}deg  [~${leg.move.toFixed(1)}s]`);
     P(`        if (!driveTo(${wp.x.toFixed(1)}, ${wp.y.toFixed(1)}, ${wp.heading})) { finish(); return; }`);
@@ -2113,15 +2311,45 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       depart.forEach(line => P(`        ${line}`));
     }
     P("");
+    const br = branchAt(branches, i + 1);
+    if (br) reachable = emitBranch(br);
   });
+  if (!reachable) P("        // (every branch above ends the auto, so nothing follows)", "");
 
   P("        finish();",
     "    }",
     "");
 
+  /* One method per arm. An arm reports whether it finished rather than calling
+   * finish() itself, so the caller decides — the same contract driveTo has. */
+  armMethods.forEach(({ name, arm }) => {
+    P(`    /** Branch arm: ${arm.name}. Runs from wherever the branch left the robot. */`,
+      `    private boolean ${name}() {`);
+    (arm.waypoints || []).forEach((wp, i) => {
+      P(`        // ${arm.name} ${i + 1} — (${Number(wp.x).toFixed(1)}, ${Number(wp.y).toFixed(1)}) @ ${wp.heading}deg`,
+        `        if (!driveTo(${Number(wp.x).toFixed(1)}, ${Number(wp.y).toFixed(1)}, ${wp.heading})) return false;`);
+      season.renderEmit(wp.action, wp.actionParams || {}, ctx).forEach(l => P(`        ${l}`));
+      const dep = season.renderEmit(wp.departAction || "none", wp.departActionParams || {}, ctx);
+      if (dep.length) { P(`        // leaving ${arm.name} ${i + 1}`); dep.forEach(l => P(`        ${l}`)); }
+    });
+    P("        return true;", "    }", "");
+  });
+
   if (motion.logRuns) {
     const planned = waypoints.map((wp, i) =>
       `PLAN,${i + 1},${wp.x.toFixed(1)},${wp.y.toFixed(1)},${wp.heading},${wp.action}`);
+    /* An arm's legs are numbered from 1 as well, so its plan goes in its own row
+     * type. The old parser ignores a row it does not know, and the BRANCH row
+     * written at run time says which of these actually happened. */
+    (branches || []).forEach(br => {
+      const arms = [...(br.rules || []).map((r, i) => ({ i: i + 1, arm: r.arm })),
+                    { i: 0, arm: br.fallbackArm }];
+      arms.forEach(({ i, arm }) => {
+        if (!arm || arm === "continue") return;
+        (arm.waypoints || []).forEach((wp, j) => planned.push(
+          `PLANA,${br.point},${i},${j + 1},${Number(wp.x).toFixed(1)},${Number(wp.y).toFixed(1)},${wp.heading},${wp.action}`));
+      });
+    });
     P("    /**",
       "     * Opens the run log. Every line carries a run id so several autos in one",
       "     * downloaded log stay separable, and a header block describing the planned",
@@ -2282,9 +2510,13 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   });
   Array.from(macroServos).forEach(m => P(`        ${m} = hardwareMap.get(Servo.class, "${m}");`));
   if (macroBlinkin) P('        blinkin = hardwareMap.get(Servo.class, "blinkin");');
+  needs.colorSensors.forEach(n => {
+    const sd = sensorsById[n];
+    if (sd) P(`        ${n} = hardwareMap.get(${sd.javaType || "ColorSensor"}.class, "${n}");`);
+  });
   if (needLimelight) {
     P("",
-      '        limelight = hardwareMap.get(Limelight3A.class, "limelight");',
+      `        limelight = hardwareMap.get(Limelight3A.class, "${(profile && profile.limelight && profile.limelight.hardwareName) || "limelight"}");`,
       `        if (limelight != null) limelight.pipelineSwitch(${pipeline});`);
   }
   P("    }", "");
@@ -2535,7 +2767,38 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     "");
 
   /* ---------------- vision ---------------- */
-  if (needLimelight) {
+  if (needs.clock) {
+    P("    /** Seconds of AUTO left, by the clock started at START. */",
+      "    private double timeLeft() { return AUTO_SECONDS - autoClock.seconds(); }",
+      "");
+  }
+  // seesHue and its reader come from BotBuilder, so a branch reads colour the
+  // same way the TeleOp rules do.
+  if (needs.colorSensors.length && jh.seesHue) P("    // ================= colour =================", ...jh.seesHue, "");
+  if (needs.vision && jh.seeTarget) {
+    P("    // ================= branch conditions =================", ...jh.seeTarget, "",
+      "    /**",
+      "     * True if the target shows up at any point inside maxSeconds.",
+      "     *",
+      "     * A single look almost always says no: the camera needs a few frames after",
+      "     * start() and the first results after START come back empty. Polling costs",
+      "     * nothing when the answer is yes, and only the timeout when it is no.",
+      "     */",
+      "    private boolean sawTarget(int[] ids, boolean requireUpright, double maxSeconds) {",
+      "        ElapsedTime look = new ElapsedTime();",
+      "        while (opModeIsActive() && look.seconds() < maxSeconds) {",
+      "            if (targetVisible(ids, requireUpright)) return true;",
+      "            idle();",
+      "        }",
+      "        return false;",
+      "    }",
+      "");
+  }
+  /* seeTag and the two approach routines serve the tag actions. A branch only
+   * asks whether something is in view, and answers that with the profile's own
+   * helper above, so a path that branches but never aims at a tag does not carry
+   * this. */
+  if (hasLimelight && usesVision) {
     P("    // ================= vision =================",
       "    /** Camera-space position of a tag, or null when not visible. */",
       "    private Position seeTag(int tagId) {",
@@ -2706,6 +2969,17 @@ function parseRunLog(text) {
       case "PLAN":
         run.planned.push({ index: +f[1], x: +f[2], y: +f[3], heading: +f[4], action: f[5] || "none" });
         break;
+      // An arm's legs number from 1 like the main path's, so they are kept apart
+      // by branch point and arm rather than merged into run.planned.
+      case "PLANA":
+        (run.armPlans = run.armPlans || []).push({
+          point: +f[1], arm: +f[2], index: +f[3],
+          x: +f[4], y: +f[5], heading: +f[6], action: f[7] || "none" });
+        break;
+      // Written as the branch is taken: arm 0 is the fallback.
+      case "BRANCH":
+        (run.branches = run.branches || []).push({ point: +f[1], arm: +f[2] });
+        break;
       case "MOTION":
         run.motion = { maxVelocity: +f[1], maxAccel: +f[2], turnRate: +f[3], posTolerance: +f[4], headingTolerance: +f[5] };
         break;
@@ -2861,11 +3135,14 @@ function PathPilot() {
   const [startActionParams, setStartActionParams] = useState({});
   const [startPreset, setStartPreset] = useState(() => compileSeason(BUILTIN_PACKS[0]).getPresets("blue", 18)[0].id);
   const [waypoints, setWaypoints] = useState([]);
+  /* Declared beside the waypoints because the timing below reads it. */
+  const [branches, setBranches] = useState([]);
   const [selection, setSelection] = useState({ type: "start" });
   const [drag, setDrag] = useState(null);
   const [insertAfter, setInsertAfter] = useState(null);
   const [showGrid, setShowGrid] = useState(true);
   const [showZones, setShowZones] = useState(true);
+  const [showArms, setShowArms] = useState(true);
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [dimOpponent, setDimOpponent] = useState(true);
   const [tab, setTab] = useState("path");
@@ -2998,6 +3275,28 @@ function PathPilot() {
     const M = season.mirror;
     setStartPose(sp => { const m = M.point(sp.x, sp.y); return { x: clamp(m.x), y: clamp(m.y), heading: M.heading(sp.heading) }; });
     setStartActionParams(ap => ap && ap.tagId ? { ...ap, tagId: M.tag(ap.tagId) } : ap);
+    /* A mirrored path must test the other alliance's cluster, and an arm is a
+     * path like any other, so its waypoints flip too. Cluster names carry the
+     * alliance letter in the profile, which is what makes the swap possible. */
+    const flipCluster = (name) => {
+      const list = (profile && profile.clusters) || [];
+      const here = list.find(c => c.name === name);
+      if (!here) return name;
+      const twin = list.find(c => c.alliance !== here.alliance &&
+        c.name.replace(/^[RB]\s*/, "") === here.name.replace(/^[RB]\s*/, ""));
+      return twin ? twin.name : name;
+    };
+    const flipArm = (arm) => (!arm || arm === "continue") ? arm : { ...arm,
+      waypoints: (arm.waypoints || []).map(wp => {
+        const m = M.point(wp.x, wp.y);
+        return { ...wp, x: clamp(m.x), y: clamp(m.y), heading: M.heading(wp.heading) };
+      }) };
+    setBranches(bs => bs.map(b => ({ ...b,
+      rules: (b.rules || []).map(r => ({ ...r,
+        cluster: r.cluster ? flipCluster(r.cluster) : r.cluster,
+        tagId: r.tagId ? M.tag(r.tagId) : r.tagId,
+        arm: flipArm(r.arm) })),
+      fallbackArm: flipArm(b.fallbackArm) })));
     setWaypoints(wps => wps.map(wp => {
       const m = M.point(wp.x, wp.y);
       return { ...wp, x: clamp(m.x), y: clamp(m.y), heading: M.heading(wp.heading),
@@ -3048,8 +3347,29 @@ function PathPilot() {
 
   /* ---- timing ---- */
   const timing = estimatePath(startPose, waypoints, motion, season, profile, startAction, startActionParams);
+  /* The budget has to assume the slowest way through. Every rule that fails
+   * costs its whole timeout before the next is tried, and then the longest arm
+   * runs — so the worst case is the timeouts plus whichever arm is longest, not
+   * the route you happen to be looking at. */
+  const branchCost = (() => {
+    let worst = timing.total, notes = [];
+    (branches || []).forEach(b => {
+      const timeouts = (b.rules || []).reduce((a, r) => a + Number(r.timeoutS ?? 0.5), 0);
+      const upto = b.point === 0 ? (timing.start || 0)
+        : (timing.legs[b.point - 1] ? timing.legs[b.point - 1].cumulative : 0);
+      const from = b.point === 0 ? startPose : waypoints[b.point - 1];
+      [...(b.rules || []).map(r => r.arm), b.fallbackArm].forEach(arm => {
+        if (!arm || arm === "continue") return;
+        const t = estimatePath(from, arm.waypoints || [], motion, season, profile, "none", {});
+        const tot = upto + timeouts + t.total;
+        if (tot > worst) { worst = tot; notes = [`via "${arm.name}"`]; }
+      });
+      if (timeouts) worst = Math.max(worst, timing.total + timeouts);
+    });
+    return { worst, notes };
+  })();
   const budget = season.autoSeconds;
-  const overBudget = budget && timing.total > budget;
+  const overBudget = budget && branchCost.worst > budget;
 
   /* ---- files ----
    * Sandboxed previews block file pickers and downloads, so every transfer
@@ -3176,7 +3496,7 @@ function PathPilot() {
     app: "PathPilot", formatVersion: 2, name: pathName || "",
     seasonId: season.id, seasonName: `${season.name} ${season.years}`,
     alliance, robotSize, robotLength, robotWidth, motion, startPose, startPreset,
-    startAction, startActionParams,
+    startAction, startActionParams, branches,
     waypoints: waypoints.map(({ id, ...r }) => r), exportedAt: new Date().toISOString(),
   });
   const exportPath = () => openExport("Save path", pathFileName(), pathPayload());
@@ -3194,6 +3514,7 @@ function PathPilot() {
         setRobotWidth(d.robotWidth || d.robotSize || 18);
         if (d.motion) setMotion({ ...DEFAULT_MOTION, ...d.motion });
         setPathName(d.name || "Auto");
+        setBranches(Array.isArray(d.branches) ? d.branches : []);
         setStartPreset(d.startPreset || "custom"); setStartPose(d.startPose);
         // Paths saved before start actions existed simply have none.
         setStartAction(d.startAction || "none");
@@ -3359,7 +3680,7 @@ function PathPilot() {
   const generateCode = () => generateOpMode({
     className: opModeClassName,
     season, alliance, startPose, waypoints, motion, profile, timing,
-    startAction, startActionParams,
+    startAction, startActionParams, branches,
   });
 
   /* ---- render helpers ---- */
@@ -3460,6 +3781,47 @@ function PathPilot() {
   const headingLine = (pos, h, color, len) => (
     <line x1={pos.x} y1={pos.y} x2={pos.x + Math.cos((90 - h) * Math.PI / 180) * len} y2={pos.y - Math.sin((90 - h) * Math.PI / 180) * len} stroke={color} strokeWidth="2.5" strokeLinecap="round" />
   );
+
+  /* Every arm of every branch, drawn from the point the branch sits at rather
+   * than from the arm's own start pose — because that pose is ignored at run
+   * time. The robot carries on from where the branch caught it and drives
+   * straight to the arm's first waypoint, and that first leg is the one you
+   * never think about until it crosses something. */
+  const ARM_COLORS = ["#A855F7", "#EC4899", "#06B6D4", "#F97316"];
+  const renderArms = () => {
+    if (!showArms) return null;
+    const out = []; let ci = 0;
+    (branches || []).forEach(b => {
+      const from = b.point === 0 ? startPose : waypoints[b.point - 1];
+      if (!from) return;
+      [...(b.rules || []).map(r => r.arm), b.fallbackArm].forEach(arm => {
+        if (!arm || arm === "continue" || !(arm.waypoints || []).length) return;
+        const color = ARM_COLORS[ci % ARM_COLORS.length]; ci++;
+        const chain = [from, ...arm.waypoints];
+        for (let i = 0; i < chain.length - 1; i++) {
+          const p1 = toSvg(chain[i].x, chain[i].y), p2 = toSvg(chain[i + 1].x, chain[i + 1].y);
+          out.push(<line key={`a${ci}l${i}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                         stroke={color} strokeWidth={i === 0 ? 2.6 : 1.8}
+                         strokeDasharray={i === 0 ? "2,5" : "5,5"}
+                         opacity={0.85} style={{ pointerEvents: "none" }} />);
+        }
+        arm.waypoints.forEach((wp, i) => {
+          const q = toSvg(wp.x, wp.y);
+          out.push(
+            <g key={`a${ci}p${i}`} style={{ pointerEvents: "none" }}>
+              <circle cx={q.x} cy={q.y} r="8" fill="#18181b" stroke={color} strokeWidth="2" opacity={0.95} />
+              <text x={q.x} y={q.y} textAnchor="middle" dominantBaseline="middle"
+                    fill={color} fontSize="9" fontWeight="bold">{i + 1}</text>
+            </g>
+          );
+        });
+        const f = toSvg(arm.waypoints[0].x, arm.waypoints[0].y);
+        out.push(<text key={`a${ci}t`} x={f.x + 12} y={f.y - 11} fill={color} fontSize="10"
+                       style={{ pointerEvents: "none" }}>{arm.name}</text>);
+      });
+    });
+    return out;
+  };
 
   const renderPath = () => {
     const out = []; const chain = [startPose, ...waypoints];
@@ -3572,6 +3934,7 @@ function PathPilot() {
   const TABS = [
     { id: "path", label: "🗺️ Path" }, { id: "waypoints", label: "📋 Waypoints" },
     { id: "motion", label: "🎚️ Motion" }, { id: "code", label: "💻 Code" },
+    { id: "branch", label: `🔀 Branch${branches.length ? ` (${branches.length})` : ""}` },
     { id: "log", label: "📈 Log" }, { id: "field", label: "📐 Field data" },
   ];
 
@@ -3836,6 +4199,7 @@ function PathPilot() {
                 {showZones && renderTape()}
                 {renderMarkers()}
                 {renderTags()}
+                {renderArms()}
                 {renderPath()}
                 <text x={MARGIN + FIELD * SCALE / 2} y={VIEW - 8} textAnchor="middle" fill="#71717a" fontSize="10" fontWeight="600" letterSpacing="1" style={{ pointerEvents: "none" }}>{season.audienceLabel}</text>
               </svg>
@@ -3985,7 +4349,8 @@ function PathPilot() {
 
               <div style={CARD}>
                 <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Display</div>
-                {[["Show tile grid", showGrid, setShowGrid], ["Show zones", showZones, setShowZones], ["Show game pieces", showArtifacts, setShowArtifacts], ["Dim opponent", dimOpponent, setDimOpponent]].map(([lbl, val, set]) => (
+                {[["Show tile grid", showGrid, setShowGrid], ["Show zones", showZones, setShowZones], ["Show game pieces", showArtifacts, setShowArtifacts], ["Dim opponent", dimOpponent, setDimOpponent],
+                  ...(branches.length ? [["Show branch arms", showArms, setShowArms]] : [])].map(([lbl, val, set]) => (
                   <label key={lbl} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", marginBottom: "6px", cursor: "pointer" }}>
                     <input type="checkbox" checked={val} onChange={(e) => set(e.target.checked)} /> {lbl}
                   </label>
@@ -4423,6 +4788,217 @@ function PathPilot() {
                       {run.pid && <div style={{ marginTop: "4px" }}>kP {run.pid.transP} / {run.pid.headP}</div>}
                     </div>
                   </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {tab === "branch" && (() => {
+          const clusters = (profile && profile.clusters) || [];
+          const hasLL = !!(profile && profile.limelight && profile.limelight.present);
+          const lib = Object.values(library).filter(e => e.seasonId === season.id && e.alliance === alliance);
+          const setBr = (i, patch) => setBranches(bs => bs.map((b, j) => j === i ? { ...b, ...patch } : b));
+          const setRule = (i, ri, patch) => setBr(i, {
+            rules: branches[i].rules.map((r, k) => k === ri ? { ...r, ...patch } : r) });
+          const colorSensors = ((profile && profile.sensors) || []).filter(x => x.kind === "color");
+          const newRule = () => ({ kind: clusters.length ? "clusterVisible" : "tagVisible",
+            cluster: clusters.length ? clusters[0].name : "", tagId: season.tags[0] ? season.tags[0].id : 0,
+            upright: false, timeoutS: 0.5,
+            seconds: 8, button: "x",
+            sensor: colorSensors[0] ? colorSensors[0].hardwareName : "", hue: 225, hueTol: 35,
+            arm: "continue" });
+          const usedPoints = branches.map(b => b.point);
+          /* An arm is copied out of the library, not linked to it, so the path
+           * file carries everything and opens anywhere. */
+          const pickArm = (val) => {
+            if (val === "continue") return "continue";
+            const e = library[val];
+            return e ? { name: e.name, libraryId: e.id, startPose: e.payload.startPose,
+                         waypoints: e.payload.waypoints || [] } : "continue";
+          };
+          const armValue = (arm) => (!arm || arm === "continue") ? "continue" : (arm.libraryId || "continue");
+          const ArmPick = ({ arm, onPick }) => (
+            <select value={armValue(arm)} onChange={(e) => onPick(pickArm(e.target.value))}
+                    style={{ ...IN, width: "190px" }}>
+              <option value="continue">↳ carry on with this path</option>
+              {lib.map(e => <option key={e.id} value={e.id}>▶ {e.name}</option>)}
+            </select>
+          );
+          const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+          return (
+            <div style={{ ...CARD, display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div style={{ fontSize: "12px", color: "#a1a1aa", lineHeight: 1.6 }}>
+                A branch asks the camera a question and takes one of several paths from the answer.
+                Rules are tried in order and the first match wins; the fallback always runs.
+                An arm either carries on with this path, or runs a saved path instead — and a saved
+                path <strong>ends the auto</strong>, because it is an alternative, not a detour.
+              </div>
+
+              {!hasLL && branches.some(b => (b.rules || []).some(r => r.kind === "clusterVisible" || r.kind === "tagVisible")) && (
+                <div style={{ fontSize: "12px", color: "#FCA5A5", background: "rgba(185,28,28,0.12)",
+                              border: "1px solid #7f1d1d", borderRadius: "6px", padding: "10px", lineHeight: 1.6 }}>
+                  This profile has no Limelight, so code will not generate. Enable it on BotBuilder's
+                  Limelight tab and re-export the profile. You can still set the branch up here.
+                </div>
+              )}
+              {hasLL && clusters.length === 0 && (
+                <div style={{ fontSize: "12px", color: "#FBBF24" }}>
+                  The profile declares no tag clusters — only single-tag conditions are available.
+                </div>
+              )}
+              {lib.length === 0 && (
+                <div style={{ fontSize: "12px", color: "#FBBF24", lineHeight: 1.6 }}>
+                  No saved paths for {A.label} this season yet. Draw the alternative first, name it,
+                  and save it under 📚 Paths — then it can be picked as an arm here.
+                </div>
+              )}
+
+              {branches.map((b, i) => {
+                const from = b.point === 0 ? startPose : waypoints[b.point - 1];
+                const arms = [...(b.rules || []).map(r => r.arm), b.fallbackArm];
+                const anyContinue = arms.some(a => !a || a === "continue");
+                const strays = arms.filter(a => a && a !== "continue" && a.startPose && from &&
+                                                dist(a.startPose, from) > 6);
+                return (
+                  <div key={i} style={{ border: "1px solid #3f3f46", borderRadius: "8px", padding: "12px",
+                                        display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <strong style={{ fontSize: "13px" }}>Branch</strong>
+                      <select value={b.point} onChange={(e) => setBr(i, { point: Number(e.target.value) })}
+                              style={{ ...IN, width: "auto" }}>
+                        <option value={0} disabled={usedPoints.includes(0) && b.point !== 0}>at the start</option>
+                        {waypoints.map((_, k) => (
+                          <option key={k} value={k + 1}
+                                  disabled={usedPoints.includes(k + 1) && b.point !== k + 1}>
+                            after waypoint {k + 1}
+                          </option>
+                        ))}
+                      </select>
+                      <span style={{ flex: 1 }} />
+                      <button onClick={() => setBranches(bs => bs.filter((_, j) => j !== i))}
+                              style={{ ...BTN, color: "#f87171", borderColor: "#7f1d1d" }}>Remove</button>
+                    </div>
+
+                    {(b.rules || []).map((r, ri) => (
+                      <div key={ri} style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "12px", color: "#71717a", width: "22px" }}>if</span>
+                        <select value={r.kind} onChange={(e) => setRule(i, ri, { kind: e.target.value })}
+                                style={{ ...IN, width: "auto" }}>
+                          <option value="clusterVisible" disabled={!clusters.length}>camera: cluster</option>
+                          <option value="tagVisible">camera: tag</option>
+                          <option value="timeLeft">time left</option>
+                          <option value="gamepadChoice">driver's choice</option>
+                          <option value="colorSeen" disabled={!colorSensors.length}>colour sensor</option>
+                        </select>
+
+                        {r.kind === "clusterVisible" && (
+                          <select value={r.cluster} onChange={(e) => setRule(i, ri, { cluster: e.target.value })}
+                                  style={{ ...IN, width: "auto" }}>
+                            {clusters.map(c => <option key={c.name} value={c.name}>{c.name} ({c.tagIds.join(", ")})</option>)}
+                          </select>
+                        )}
+                        {r.kind === "tagVisible" && (
+                          <select value={r.tagId} onChange={(e) => setRule(i, ri, { tagId: Number(e.target.value) })}
+                                  style={{ ...IN, width: "auto" }}>
+                            {season.tags.map(t => <option key={t.id} value={t.id}>
+                              {t.id} — {t.owner ? season.alliances[t.owner].label + " side" : "neutral"}</option>)}
+                          </select>
+                        )}
+                        {(r.kind === "clusterVisible" || r.kind === "tagVisible") && (<>
+                          <span style={{ fontSize: "12px", color: "#71717a" }}>visible within</span>
+                          <input type="number" step="0.1" min="0.1" max="5" value={r.timeoutS ?? 0.5}
+                                 onChange={(e) => setRule(i, ri, { timeoutS: Number(e.target.value) })}
+                                 style={{ ...IN, width: "64px" }} />
+                          <span style={{ fontSize: "12px", color: "#71717a" }}>s</span>
+                          <label style={{ fontSize: "11px", color: "#a1a1aa", display: "flex", alignItems: "center", gap: "4px" }}
+                                 title="Also reject a cell lying on its side — one you could not score in">
+                            <input type="checkbox" checked={!!r.upright}
+                                   onChange={(e) => setRule(i, ri, { upright: e.target.checked })} /> upright
+                          </label>
+                        </>)}
+
+                        {/* Needs no hardware at all: useful for "behind schedule, go park". */}
+                        {r.kind === "timeLeft" && (<>
+                          <span style={{ fontSize: "12px", color: "#71717a" }}>at least</span>
+                          <input type="number" step="0.5" min="0" max={season.autoSeconds || 30}
+                                 value={r.seconds ?? 8}
+                                 onChange={(e) => setRule(i, ri, { seconds: Number(e.target.value) })}
+                                 style={{ ...IN, width: "64px" }} />
+                          <span style={{ fontSize: "12px", color: "#71717a" }}>
+                            s of the {season.autoSeconds || 30}s left
+                          </span>
+                        </>)}
+
+                        {/* Latched before START, so the drive team picks on the field. */}
+                        {r.kind === "gamepadChoice" && (<>
+                          <span style={{ fontSize: "12px", color: "#71717a" }}>gamepad 1</span>
+                          <select value={r.button || "x"} onChange={(e) => setRule(i, ri, { button: e.target.value })}
+                                  style={{ ...IN, width: "auto" }}>
+                            {["a", "b", "x", "y"].map(k => <option key={k} value={k}>{k.toUpperCase()}</option>)}
+                          </select>
+                          <span style={{ fontSize: "12px", color: "#71717a" }}>pressed before START</span>
+                        </>)}
+
+                        {r.kind === "colorSeen" && (<>
+                          <select value={r.sensor} onChange={(e) => setRule(i, ri, { sensor: e.target.value })}
+                                  style={{ ...IN, width: "auto" }}>
+                            {colorSensors.map(c => <option key={c.hardwareName} value={c.hardwareName}>{c.hardwareName}</option>)}
+                          </select>
+                          <span style={{ fontSize: "12px", color: "#71717a" }}>sees hue</span>
+                          <input type="number" step="5" min="0" max="360" value={r.hue ?? 225}
+                                 onChange={(e) => setRule(i, ri, { hue: Number(e.target.value) })}
+                                 style={{ ...IN, width: "64px" }} />
+                          <span style={{ fontSize: "12px", color: "#71717a" }}>±</span>
+                          <input type="number" step="5" min="1" max="180" value={r.hueTol ?? 35}
+                                 onChange={(e) => setRule(i, ri, { hueTol: Number(e.target.value) })}
+                                 style={{ ...IN, width: "56px" }} />
+                        </>)}
+                        <span style={{ fontSize: "12px", color: "#71717a" }}>→</span>
+                        <ArmPick arm={r.arm} onPick={(a) => setRule(i, ri, { arm: a })} />
+                        <button onClick={() => setBr(i, { rules: b.rules.filter((_, k) => k !== ri) })}
+                                style={{ ...BTN, color: "#f87171", borderColor: "#7f1d1d", padding: "4px 8px" }}>×</button>
+                      </div>
+                    ))}
+
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <span style={{ fontSize: "12px", color: "#71717a", width: "22px" }}>else</span>
+                      <ArmPick arm={b.fallbackArm} onPick={(a) => setBr(i, { fallbackArm: a })} />
+                      <button onClick={() => setBr(i, { rules: [...(b.rules || []), newRule()] })}
+                              style={BTN}>+ rule</button>
+                    </div>
+
+                    {!anyContinue && b.point < waypoints.length && (
+                      <div style={{ fontSize: "11px", color: "#FBBF24", lineHeight: 1.6 }}>
+                        ⚠ No arm carries on, so waypoints {b.point + 1}–{waypoints.length} can never run.
+                        They are left out of the generated code.
+                      </div>
+                    )}
+                    {strays.length > 0 && from && (
+                      <div style={{ fontSize: "11px", color: "#FBBF24", lineHeight: 1.6 }}>
+                        ⚠ {strays.map(a => `"${a.name}"`).join(", ")} start
+                        {strays.length === 1 ? "s" : ""} well away from this branch point
+                        ({from.x.toFixed(0)}, {from.y.toFixed(0)}). The arm runs from wherever the robot
+                        actually is, so set its own start pose here to make it behave the same when you
+                        run it on its own.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <button onClick={() => {
+                          const free = [0, ...waypoints.map((_, k) => k + 1)].find(p => !usedPoints.includes(p));
+                          if (free === undefined) return setNotice({ bad: true, msg: "Every point already has a branch." });
+                          setBranches(bs => [...bs, { point: free, rules: [newRule()], fallbackArm: "continue" }]);
+                        }} style={BTN}>+ Add branch point</button>
+                {branches.length > 0 && (
+                  <span style={{ fontSize: "12px", color: overBudget ? "#f87171" : "#71717a" }}>
+                    Worst case {branchCost.worst.toFixed(1)}s
+                    {branchCost.notes.length ? ` ${branchCost.notes[0]}` : ""}
+                    {budget ? ` of ${budget}s` : ""}
+                  </span>
                 )}
               </div>
             </div>
