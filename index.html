@@ -2115,6 +2115,22 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "// Enable it on BotBuilder's Limelight tab and re-export the profile.",
     ].join("\n");
   }
+  /* An absent pitch and a genuine 0 look the same, so a missing field is not
+   * defaulted: a 45-degree mount silently treated as level puts the fix tens of
+   * inches out, and confidently so. Re-exporting is cheap; a wrong pose is not. */
+  if (usesFix && !Number.isFinite(Number((profile.limelight || {}).pitchDeg))) {
+    return [
+      "// " + className + " cannot be generated.",
+      "//",
+      "// A waypoint resets the pose from an AprilTag, but the profile carries no",
+      "// limelight.pitchDeg. The camera reports a tag along its own optical axis,",
+      "// so without the mount angle there is no way to turn that into a distance",
+      "// across the floor - and guessing level would be wrong on a tilted mount.",
+      "//",
+      "// Set the camera pitch on BotBuilder's Limelight tab (0 for a level mount)",
+      "// and re-export the profile.",
+    ].join("\n");
+  }
   const unknownFixTags = fixTagIds.filter(id => !seasonTagById[id]);
   if (unknownFixTags.length) {
     return [
@@ -2284,6 +2300,7 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     const ll = (profile && profile.limelight) || {};
     const camX = Number(ll.xOffsetIn) || 0;
     const camY = Number(ll.yOffsetIn) || 0;
+    const camPitch = Number(ll.pitchDeg).toFixed(2);
     const facing = String(ll.facing || "FORWARD").toUpperCase();
     P("    // ================= AprilTag pose fix =================",
       "    // Field positions of the tags this path resets against, from the season",
@@ -2296,6 +2313,12 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "     * the camera at the robot's centre and be off by the mounting distance. */",
       `    public static final double CAM_X_OFFSET = ${camX.toFixed(2)};`,
       `    public static final double CAM_Y_OFFSET = ${camY.toFixed(2)};`,
+      "    /* Mount pitch, degrees, + = optical axis tilted up. The camera reports a",
+      "     * tag along its own axis, which on a tilted mount is not the floor, so the",
+      "     * depth has to be rotated back down before it means anything on the field.",
+      "     * Same profile field that drives LIMELIGHT_PITCH_DEG in the BotBuilder",
+      "     * helper, repeated here because a path can use a fix without a branch. */",
+      `    public static final double CAM_PITCH_DEG = ${camPitch};`,
       "    /** Frames averaged per fix. One frame is noisy; three costs about 35ms. */",
       "    public static final int FIX_FRAMES = 3;",
       "    /** Minimum spacing between samples, so each lands on a different frame. */",
@@ -3011,6 +3034,8 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "         * spaced by FIX_FRAME_GAP_MS. Without that, three reads in three",
       "         * milliseconds would all return the same frame and the average would",
       "         * be the single noisy reading it was meant to replace. */",
+      "        double pitch = Math.toRadians(CAM_PITCH_DEG);",
+      "        double cosP = Math.cos(pitch), sinP = Math.sin(pitch);",
       "        ElapsedTime look = new ElapsedTime();",
       "        double sx = 0, sz = 0;",
       "        int n = 0;",
@@ -3021,8 +3046,13 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "            if (n > 0 && nowMs - lastSampleMs < FIX_FRAME_GAP_MS) { idle(); continue; }",
       "            Position pos = seeTag(tagId);",
       "            if (pos != null) {",
+      "                /* seeTag reports the raw camera frame: x right, y DOWN, z along",
+      "                 * the optical axis. Rotating (y, z) by the mount pitch turns that",
+      "                 * depth into distance across the floor, which is what a field",
+      "                 * coordinate needs. Lateral x is unaffected by pitch. */",
+      "                double yIn = pos.y * 39.3701, zAxisIn = pos.z * 39.3701;",
       "                sx += pos.x * 39.3701;",
-      "                sz += pos.z * 39.3701;",
+      "                sz += zAxisIn * cosP + yIn * sinP;",
       "                n++;",
       "                lastSampleMs = nowMs;",
       "            } else {",
