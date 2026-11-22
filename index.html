@@ -2012,6 +2012,25 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "// current BotBuilder.",
     ].join("\n");
   }
+  /* An empty id list compiles and is always false, so the robot would take the
+   * fallback every match and look like the camera never sees anything. */
+  const emptyRules = (branches || []).flatMap(b => b.rules || [])
+    .filter(r => (r.kind === "clusterVisible" &&
+                   !((profile && profile.clusters) || []).some(c => c.name === r.cluster))
+              || (r.kind === "tagVisible" && !(r.tagId > 0)));
+  if (emptyRules.length) {
+    return [
+      "// " + className + " cannot be generated.",
+      "//",
+      `// ${emptyRules.length} branch rule${emptyRules.length > 1 ? "s have" : " has"} no tag or cluster chosen.`,
+      "// Left as it is, the condition would always be false and the robot would",
+      "// take the fallback every match.",
+      "//",
+      "// Pick one in the Branch tab. A rule added before the robot profile was",
+      "// loaded has no cluster, because there were none to choose from yet.",
+    ].join("\n");
+  }
+
   const missingSensors = needs.colorSensors.filter(n => !sensorsById[n]);
   if (missingSensors.length || (needs.colorSensors.length && !jh.seesHue)) {
     return [
@@ -4897,9 +4916,16 @@ function PathPilot() {
                           <option value="colorSeen" disabled={!colorSensors.length}>colour sensor</option>
                         </select>
 
+                        {/* A rule made before the profile loaded has no cluster, and a
+                            controlled select with an unmatched value silently shows the
+                            first option while storing nothing — so the blank is spelled
+                            out rather than hidden behind a name never picked. */}
                         {r.kind === "clusterVisible" && (
-                          <select value={r.cluster} onChange={(e) => setRule(i, ri, { cluster: e.target.value })}
-                                  style={{ ...IN, width: "auto" }}>
+                          <select value={clusters.some(c => c.name === r.cluster) ? r.cluster : ""}
+                                  onChange={(e) => setRule(i, ri, { cluster: e.target.value })}
+                                  style={{ ...IN, width: "auto",
+                                           borderColor: clusters.some(c => c.name === r.cluster) ? "#3f3f46" : "#B91C1C" }}>
+                            <option value="">— pick a cluster —</option>
                             {clusters.map(c => <option key={c.name} value={c.name}>{c.name} ({c.tagIds.join(", ")})</option>)}
                           </select>
                         )}
