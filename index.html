@@ -2239,7 +2239,9 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   }
   if (needs.clock) P("        autoClock.reset();");
   P(...(motion.logRuns ? ["        logStart();"] : []), "");
-  if (needLimelight) P("        if (limelight != null) limelight.start();", "");
+  /* The camera used to be started here, after waitForStart. It needs a few
+   * frames before it reports anything, so a branch looking for half a second
+   * spent most of that warming up. Started in initHardware instead. */
 
   /* ---------------- the start action ----------------
    * Runs after waitForStart and before the first leg, so something that needs a
@@ -2517,7 +2519,10 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   if (needLimelight) {
     P("",
       `        limelight = hardwareMap.get(Limelight3A.class, "${(profile && profile.limelight && profile.limelight.hardwareName) || "limelight"}");`,
-      `        if (limelight != null) limelight.pipelineSwitch(${pipeline});`);
+      `        if (limelight != null) limelight.pipelineSwitch(${pipeline});`,
+      "        // Started here rather than after START, so it is warm and reporting",
+      "        // by the time a branch condition asks it anything.",
+      "        if (limelight != null) limelight.start();");
   }
   P("    }", "");
 
@@ -4867,7 +4872,7 @@ function PathPilot() {
                       <strong style={{ fontSize: "13px" }}>Branch</strong>
                       <select value={b.point} onChange={(e) => setBr(i, { point: Number(e.target.value) })}
                               style={{ ...IN, width: "auto" }}>
-                        <option value={0} disabled={usedPoints.includes(0) && b.point !== 0}>at the start</option>
+                        <option value={0} disabled={usedPoints.includes(0) && b.point !== 0}>after the start action</option>
                         {waypoints.map((_, k) => (
                           <option key={k} value={k + 1}
                                   disabled={usedPoints.includes(k + 1) && b.point !== k + 1}>
@@ -4907,7 +4912,8 @@ function PathPilot() {
                         )}
                         {(r.kind === "clusterVisible" || r.kind === "tagVisible") && (<>
                           <span style={{ fontSize: "12px", color: "#71717a" }}>visible within</span>
-                          <input type="number" step="0.1" min="0.1" max="5" value={r.timeoutS ?? 0.5}
+                          <input type="number" step="0.1" min="0.1" max={season.autoSeconds || 30}
+                                 value={r.timeoutS ?? 0.5}
                                  onChange={(e) => setRule(i, ri, { timeoutS: Number(e.target.value) })}
                                  style={{ ...IN, width: "64px" }} />
                           <span style={{ fontSize: "12px", color: "#71717a" }}>s</span>
