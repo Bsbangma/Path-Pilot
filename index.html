@@ -678,6 +678,12 @@ const DECODE_PACK = {
     { id: "macro", label: "Robot macro", icon: "📋", est: 1.0,
       params: [{ key: "macroMethod", label: "Macro", type: "macro", default: "" }],
       emit: ["{macroMethod}();"] },
+    { id: "relocalize", label: "Reset pose from AprilTag", icon: "📍", est: 0.3,
+      params: [
+        { key: "tagId", label: "Tag ID", type: "tagId", default: "" },
+        { key: "maxSeconds", label: "Look for up to (sec)", type: "number", default: 0.3, step: 0.1, min: 0.1 },
+      ],
+      emit: ["resetPoseFromTag({tagId}, {maxSeconds});"] },
   ],
 
   codeNotes: [
@@ -1735,6 +1741,31 @@ const BIOBUZZ_PACK = {
       "emit": [
         "{macroMethod}();"
       ]
+    },
+    {
+      "id": "relocalize",
+      "label": "Reset pose from AprilTag",
+      "icon": "\ud83d\udccd",
+      "est": 0.3,
+      "params": [
+        {
+          "key": "tagId",
+          "label": "Tag ID",
+          "type": "tagId",
+          "default": ""
+        },
+        {
+          "key": "maxSeconds",
+          "label": "Look for up to (sec)",
+          "type": "number",
+          "default": 0.3,
+          "step": 0.1,
+          "min": 0.1
+        }
+      ],
+      "emit": [
+        "resetPoseFromTag({tagId}, {maxSeconds});"
+      ]
     }
   ],
   "codeNotes": [
@@ -1915,17 +1946,20 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
   const hasLimelight = !!(profile && profile.limelight && profile.limelight.present) || season.tags.length > 0;
   const pipeline = (profile && profile.limelight && profile.limelight.pipeline) || 0;
 
-  // Only the macros this path actually calls get emitted.
-  // Arrival and departure slots both reach macros, and a macro used only at a
-  // departure still has to be emitted as a method.
-  const usedMethods = new Set(
-    [{ action: startAction, actionParams: startActionParams },
-     ...waypoints,
-     ...waypoints.map(w => ({ action: w.departAction, actionParams: w.departActionParams }))]
-      .filter(w => w.action === "macro" && w.actionParams && w.actionParams.macroMethod)
-      .map(w => w.actionParams.macroMethod));
+  /* Every macro in the profile is emitted, whether this path calls it or not.
+   *
+   * Emitting only the called ones meant a macro used by a branch arm was
+   * filtered out while emitBranch still wrote the call, so the file would not
+   * compile. Walking the arms as well would fix that, but writing all of them
+   * is simpler and makes the generated file independent of which branch a run
+   * happens to take: every mechanism the profile knows about is declared,
+   * initialised, and stopped in finish(), so no arm can leave a motor running.
+   *
+   * A device in the profile but missing from the Hub configuration throws in
+   * initHardware - but the same profile's TeleOp would have failed first and
+   * more obviously, so that is a configuration problem, not this one. */
   const allMacros = (profile && profile.macros) || [];
-  const macros = allMacros.filter(m => usedMethods.has(m.method) && m.java);
+  const macros = allMacros.filter(m => m.java);
 
   const macroMotors = new Set();
   const macroServos = new Set();
@@ -1961,7 +1995,44 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     if (k && [k.p, k.i, k.d, k.f].every(v => typeof v === "number")) auxPIDF[a.hardwareName] = k;
   });
 
-  const usesVision = waypoints.some(w => ["faceTag", "driveToTag", "readMotif"].includes(w.action));
+  /* Every slot that can hold an action needs checking, not just arrival: a
+   * start action, a departure action or an arm's waypoint can all ask for the
+   * camera, and missing one skipped the field, the imports and the init. */
+  const VISION_ACTIONS = ["faceTag", "driveToTag", "readMotif", "relocalize"];
+  const allActionSlots = (brs) => {
+    const out = [{ action: startAction, params: startActionParams || {} }];
+    waypoints.forEach(w => {
+      out.push({ action: w.action, params: w.actionParams || {} });
+      out.push({ action: w.departAction, params: w.departActionParams || {} });
+    });
+    (brs || []).forEach(br => {
+      [...(br.rules || []).map(r => r.arm), br.fallbackArm].forEach(arm => {
+        if (!arm || arm === "continue") return;
+        (arm.waypoints || []).forEach(w => {
+          out.push({ action: w.action, params: w.actionParams || {} });
+          out.push({ action: w.departAction, params: w.departActionParams || {} });
+        });
+      });
+    });
+    return out.filter(x => x.action);
+  };
+  const actionSlots = allActionSlots(branches);
+  /* Which macros this path actually calls - needed only to name the ones the
+   * loaded profile does not carry, since every macro it does carry is emitted. */
+  const usedMethods = new Set(
+    actionSlots
+      .filter(w => w.action === "macro" && w.params && w.params.macroMethod)
+      .map(w => w.params.macroMethod));
+  const missingMethods = Array.from(usedMethods).filter(n => !macros.some(m => m.method === n));
+  const usesVision = actionSlots.some(x => VISION_ACTIONS.includes(x.action));
+  /* Tag ids a pose fix actually asks for. Only these get a table entry, so the
+   * generated constants stay readable instead of listing all sixteen. */
+  const fixTagIds = [...new Set(actionSlots
+    .filter(x => x.action === "relocalize")
+    .map(x => Number(x.params.tagId))
+    .filter(n => Number.isFinite(n) && n > 0))].sort((a, b) => a - b);
+  const seasonTagById = Object.fromEntries((season.tags || []).map(t => [Number(t.id), t]));
+  const usesFix = fixTagIds.length > 0;
   /* A branch condition needs the camera just as much as a tag action does, and
    * without this the field, the imports and the init would all be skipped and
    * the branch code would not compile. */
@@ -2028,6 +2099,42 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "//",
       "// Pick one in the Branch tab. A rule added before the robot profile was",
       "// loaded has no cluster, because there were none to choose from yet.",
+    ].join("\n");
+  }
+
+  /* A pose fix rewrites where the robot thinks it is. A wrong tag id, or one the
+   * season pack has no coordinates for, would move the pose to a position that
+   * does not exist — far worse than the drift it was meant to correct. */
+  if (usesFix && !profileHasLimelight) {
+    return [
+      "// " + className + " cannot be generated.",
+      "//",
+      "// A waypoint resets the pose from an AprilTag, but the loaded robot profile",
+      "// has no Limelight (limelight.present = false).",
+      "//",
+      "// Enable it on BotBuilder's Limelight tab and re-export the profile.",
+    ].join("\n");
+  }
+  const unknownFixTags = fixTagIds.filter(id => !seasonTagById[id]);
+  if (unknownFixTags.length) {
+    return [
+      "// " + className + " cannot be generated.",
+      "//",
+      `// Tag ${unknownFixTags.join(", ")} ${unknownFixTags.length > 1 ? "are" : "is"} used for a pose reset, but ${unknownFixTags.length > 1 ? "those ids have" : "that id has"}`,
+      "// no field position in the " + season.name + " pack. A pose fix needs to know",
+      "// where the tag actually is, or it would move the robot's belief to a point",
+      "// that does not exist.",
+      "//",
+      "// Known tags this season: " + (season.tags || []).map(t => t.id).join(", ") + ".",
+    ].join("\n");
+  }
+  const fixSlotsNoTag = actionSlots.filter(x => x.action === "relocalize" && !(Number(x.params.tagId) > 0));
+  if (fixSlotsNoTag.length) {
+    return [
+      "// " + className + " cannot be generated.",
+      "//",
+      `// ${fixSlotsNoTag.length} pose reset${fixSlotsNoTag.length > 1 ? "s have" : " has"} no tag id chosen. Pick one on the waypoint,`,
+      "// or set the action back to None.",
     ].join("\n");
   }
 
@@ -2171,6 +2278,40 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
     `    public static final double START_HEADING = ${startPose.heading};`,
     "");
   if (myTag) P(`    public static final int GOAL_TAG = ${myTag};`, "");
+
+  /* ---------------- pose-fix tables ---------------- */
+  if (usesFix) {
+    const ll = (profile && profile.limelight) || {};
+    const camX = Number(ll.xOffsetIn) || 0;
+    const camY = Number(ll.yOffsetIn) || 0;
+    const facing = String(ll.facing || "FORWARD").toUpperCase();
+    P("    // ================= AprilTag pose fix =================",
+      "    // Field positions of the tags this path resets against, from the season",
+      "    // pack. Slot i of all three arrays describes the same tag.",
+      `    private static final int[]    FIX_TAG_IDS = { ${fixTagIds.join(", ")} };`,
+      `    private static final double[] FIX_TAG_X   = { ${fixTagIds.map(id => Number(seasonTagById[id].x).toFixed(1)).join(", ")} };`,
+      `    private static final double[] FIX_TAG_Y   = { ${fixTagIds.map(id => Number(seasonTagById[id].y).toFixed(1)).join(", ")} };`,
+      "    /* Where the camera sits relative to the robot's centre, inches, from the",
+      "     * robot profile. + right and + forward. Without these the fix would place",
+      "     * the camera at the robot's centre and be off by the mounting distance. */",
+      `    public static final double CAM_X_OFFSET = ${camX.toFixed(2)};`,
+      `    public static final double CAM_Y_OFFSET = ${camY.toFixed(2)};`,
+      "    /** Frames averaged per fix. One frame is noisy; three costs about 35ms. */",
+      "    public static final int FIX_FRAMES = 3;",
+      "    /** Minimum spacing between samples, so each lands on a different frame. */",
+      "    public static final long FIX_FRAME_GAP_MS = 15;",
+      "    /* A fix larger than this is a misread, not drift — a tag seen at a steep",
+      "     * angle, or the wrong tag matched. Rejecting it leaves the pose alone,",
+      "     * which is the safe failure: odometry error grows slowly, a bad fix is",
+      "     * wrong all at once. */",
+      "    public static final double FIX_MAX_JUMP = 12.0;    // in",
+      "");
+    if (facing !== "FORWARD") {
+      P(`    // NOTE: the profile reports the camera facing ${facing}, but the fix below`,
+        "    // assumes FORWARD. Mount it forward, or the correction will be rotated.",
+        "");
+    }
+  }
 
   /* ---------------- fields ---------------- */
   P("    private DcMotor frontLeft, frontRight, backLeft, backRight;",
@@ -2839,8 +2980,96 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       "        }",
       "        return null;",
       "    }",
+      "");
+  }
+
+  /* ---------------- pose fix ---------------- */
+  if (usesFix) {
+    P("    /**",
+      "     * Rewrites the pose from a sighting of one AprilTag of known field position.",
+      "     *",
+      "     * Heading is left alone. The IMU does not drift in any way a tag could",
+      "     * improve on, and a heading taken from a tag seen off-axis is worse than",
+      "     * the one already held. Only x and y move.",
+      "     *",
+      "     * The arithmetic: the camera reports the tag at (x lateral, z depth) in its",
+      "     * own frame. Adding the camera's mounting offset puts that in the robot's",
+      "     * frame, rotating by the current heading puts it in the field's, and",
+      "     * subtracting it from the tag's known field position leaves the robot.",
+      "     *",
+      "     * Returns true when the pose was actually changed.",
+      "     */",
+      "    private boolean resetPoseFromTag(int tagId, double maxSeconds) {",
+      "        int slot = -1;",
+      "        for (int i = 0; i < FIX_TAG_IDS.length; i++) if (FIX_TAG_IDS[i] == tagId) { slot = i; break; }",
+      "        if (slot < 0) return false;   // generator checked this; belt and braces",
       "",
-      "    private boolean faceAprilTag(int tagId) {",
+      "        /* Average a few frames. One is noisy enough that a fix can wander an",
+      "         * inch or two between consecutive reads; three settles it.",
+      "         *",
+      "         * The control loop runs far faster than the camera, so samples are",
+      "         * spaced by FIX_FRAME_GAP_MS. Without that, three reads in three",
+      "         * milliseconds would all return the same frame and the average would",
+      "         * be the single noisy reading it was meant to replace. */",
+      "        ElapsedTime look = new ElapsedTime();",
+      "        double sx = 0, sz = 0;",
+      "        int n = 0;",
+      "        long lastSampleMs = 0;",
+      "        while (opModeIsActive() && look.seconds() < maxSeconds && n < FIX_FRAMES) {",
+      "            updatePose();",
+      "            long nowMs = System.currentTimeMillis();",
+      "            if (n > 0 && nowMs - lastSampleMs < FIX_FRAME_GAP_MS) { idle(); continue; }",
+      "            Position pos = seeTag(tagId);",
+      "            if (pos != null) {",
+      "                sx += pos.x * 39.3701;",
+      "                sz += pos.z * 39.3701;",
+      "                n++;",
+      "                lastSampleMs = nowMs;",
+      "            } else {",
+      "                idle();",
+      "            }",
+      "        }",
+      "        if (n == 0) {",
+      ...(motion.logRuns ? [
+      "            line(String.format(Locale.US, \"FIX,%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,MISS\",",
+      "                    runClock.seconds(), tagId, poseX, poseY, poseX, poseY, 0.0));"] : []),
+      "            telemetry.addData(\"pose fix\", \"tag \" + tagId + \" not seen - carrying on\");",
+      "            return false;",
+      "        }",
+      "",
+      "        double camRight = sx / n + CAM_X_OFFSET;",
+      "        double camFwd   = sz / n + CAM_Y_OFFSET;",
+      "",
+      "        // heading 0 faces +Y and increases clockwise, so forward is",
+      "        // (sin, cos) and right is (cos, -sin) - the same decomposition driveTo",
+      "        // uses, read backwards.",
+      "        double h = Math.toRadians(poseHeading);",
+      "        double sin = Math.sin(h), cos = Math.cos(h);",
+      "        double newX = FIX_TAG_X[slot] - (camFwd * sin + camRight * cos);",
+      "        double newY = FIX_TAG_Y[slot] - (camFwd * cos - camRight * sin);",
+      "",
+      "        double jump = Math.hypot(newX - poseX, newY - poseY);",
+      "        if (jump > FIX_MAX_JUMP) {",
+      ...(motion.logRuns ? [
+      "            line(String.format(Locale.US, \"FIX,%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,REJECT\",",
+      "                    runClock.seconds(), tagId, poseX, poseY, newX, newY, jump));"] : []),
+      "            telemetry.addData(\"pose fix REJECTED\", \"%.1f in jump, over the %.0f in limit\", jump, FIX_MAX_JUMP);",
+      "            return false;",
+      "        }",
+      "",
+      "        double oldX = poseX, oldY = poseY;",
+      "        setPose(newX, newY, poseHeading);",
+      ...(motion.logRuns ? [
+      "        line(String.format(Locale.US, \"FIX,%.3f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,OK\",",
+      "                runClock.seconds(), tagId, oldX, oldY, newX, newY, jump));"] : []),
+      "        telemetry.addData(\"pose fix\", \"tag %d, moved %.1f in\", tagId, jump);",
+      "        return true;",
+      "    }",
+      "");
+  }
+
+  if (hasLimelight && usesVision) {
+    P("    private boolean faceAprilTag(int tagId) {",
       "        legTimer.reset();",
       "        while (opModeIsActive() && legTimer.seconds() < TAG_SEEK_TIMEOUT) {",
       "            updatePose();",
@@ -2941,10 +3170,11 @@ function generateOpMode({ className, season, alliance, startPose, waypoints, mot
       }
       P("    }", "");
     });
-  } else if (usedMethods.size) {
-    P("    // ================= mechanism macros =================",
+  }
+  if (missingMethods.length) {
+    P("    // ================= missing macros =================",
       "    // This path calls macros that are not in the loaded robot profile:",
-      `    //   ${Array.from(usedMethods).join(", ")}`,
+      `    //   ${missingMethods.join(", ")}`,
       "    // Load the profile from BotBuilder and regenerate, or the build will fail.",
       "");
   }
@@ -3003,6 +3233,14 @@ function parseRunLog(text) {
       // Written as the branch is taken: arm 0 is the fallback.
       case "BRANCH":
         (run.branches = run.branches || []).push({ point: +f[1], arm: +f[2] });
+        break;
+      /* One row per pose reset. status OK means the pose moved, MISS that the
+       * tag was not seen, REJECT that the correction was too large to trust.
+       * The jump on an OK row is a direct measurement of accumulated drift. */
+      case "FIX":
+        (run.fixes = run.fixes || []).push({
+          t: +f[1], tagId: +f[2], fromX: +f[3], fromY: +f[4],
+          toX: +f[5], toY: +f[6], jump: +f[7], status: (f[8] || "").trim() });
         break;
       case "MOTION":
         run.motion = { maxVelocity: +f[1], maxAccel: +f[2], turnRate: +f[3], posTolerance: +f[4], headingTolerance: +f[5] };
@@ -3911,7 +4149,13 @@ function PathPilot() {
       if (p.type === "tagId") return (
         <div key={p.key} style={{ marginBottom: "10px" }}>
           <label style={LB}>{p.label}</label>
-          <select style={IN} value={cur || ""} onChange={(e) => set(p.key, Number(e.target.value))}>
+          {/* A controlled select whose value matches no option shows the first one
+              instead, so an unset tag looked like tag 30 was already chosen. The
+              placeholder gives the unset state somewhere to sit. */}
+          <select style={{ ...IN, borderColor: season.tags.some(t => t.id === cur) ? "#3f3f46" : "#B91C1C" }}
+                  value={season.tags.some(t => t.id === cur) ? cur : ""}
+                  onChange={(e) => set(p.key, Number(e.target.value))}>
+            <option value="">— pick a tag —</option>
             {season.tags.map(t => {
               // A tag need not belong to an alliance — INTO THE DEEP has two
               // neutral wall tags, and alliances[null] is undefined.
@@ -4775,8 +5019,42 @@ function PathPilot() {
                         Leg {o.leg}: {o.event} at {o.posError.toFixed(2)}in / {o.headError.toFixed(1)}°
                       </div>
                     ))}
+                    {(run.branches || []).map((b, i) => (
+                      <div key={"br" + i} style={{ color: "#93C5FD" }}>
+                        Branch at {b.point === 0 ? "the start" : "waypoint " + b.point}: took {b.arm === 0 ? "the fallback" : "arm " + b.arm}
+                      </div>
+                    ))}
                   </div>
                 </div>
+
+                {(run.fixes || []).length > 0 && (
+                  <div style={CARD}>
+                    <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Pose fixes</div>
+                    <div style={{ fontSize: "12.5px", lineHeight: 1.9 }}>
+                      {(run.fixes || []).map((x, i) => (
+                        <div key={i} style={{ color: x.status === "OK" ? "#6EE7B7" : x.status === "MISS" ? "#FBBF24" : "#fca5a5" }}>
+                          {x.t.toFixed(1)}s, tag {x.tagId}: {
+                            x.status === "OK"
+                              ? `moved ${x.jump.toFixed(1)}in, to ${x.toX.toFixed(1)}, ${x.toY.toFixed(1)}`
+                              : x.status === "MISS"
+                                ? "not seen, pose left alone"
+                                : `rejected, ${x.jump.toFixed(1)}in was too far to trust`
+                          }
+                        </div>
+                      ))}
+                      {/* The jump on a successful fix is the first direct reading of
+                          how far odometry had drifted by that point in the path. */}
+                      <div style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "6px" }}>
+                        {(() => {
+                          const ok = (run.fixes || []).filter(x => x.status === "OK");
+                          if (!ok.length) return "No fix landed, so this run tells you nothing about drift.";
+                          const worst = Math.max(...ok.map(x => x.jump));
+                          return `Largest correction ${worst.toFixed(1)}in — that is the drift odometry had accumulated by then.`;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div style={CARD}>
                   <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "8px", color: "#a1a1aa" }}>Measured vs assumed</div>
@@ -4841,12 +5119,26 @@ function PathPilot() {
             return e ? { name: e.name, libraryId: e.id, startPose: e.payload.startPose,
                          waypoints: e.payload.waypoints || [] } : "continue";
           };
-          const armValue = (arm) => (!arm || arm === "continue") ? "continue" : (arm.libraryId || "continue");
+          /* An arm carries its own waypoints, so it still generates correctly when
+           * the library entry it came from is gone - a different browser, cleared
+           * storage. Falling back to "continue" made that look like no arm was
+           * set at all, so a detached arm gets an option of its own instead. */
+          const armDetached = (arm) =>
+            !!arm && arm !== "continue" && !lib.some(e => e.id === arm.libraryId);
+          const armValue = (arm) =>
+            (!arm || arm === "continue") ? "continue" : (armDetached(arm) ? "__detached" : arm.libraryId);
           const ArmPick = ({ arm, onPick }) => (
-            <select value={armValue(arm)} onChange={(e) => onPick(pickArm(e.target.value))}
-                    style={{ ...IN, width: "190px" }}>
+            <select value={armValue(arm)}
+                    onChange={(e) => { if (e.target.value !== "__detached") onPick(pickArm(e.target.value)); }}
+                    style={{ ...IN, width: "190px",
+                             borderColor: armDetached(arm) ? "#B45309" : "#3f3f46" }}>
               <option value="continue">↳ carry on with this path</option>
               {lib.map(e => <option key={e.id} value={e.id}>▶ {e.name}</option>)}
+              {armDetached(arm) && (
+                <option value="__detached">
+                  ▶ {arm.name || "unnamed"} ({(arm.waypoints || []).length} pts, not in library)
+                </option>
+              )}
             </select>
           );
           const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
